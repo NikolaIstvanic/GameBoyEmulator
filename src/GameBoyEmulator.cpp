@@ -84,13 +84,11 @@ class GameBoyEmulator : public olc::PixelGameEngine {
 #if 0
             if (GetKey(olc::Key::SPACE).bPressed) {
                 for (int i = 0; i < 20; i++) {
-                    do { gb.step(); } while (gb.cpu.cycles != 0);
-                    do { gb.step(); } while (gb.cpu.cycles == 0);
+                    gb.step();
                 }
             }
             if (GetKey(olc::Key::S).bPressed) {
-                do { gb.step(); } while (gb.cpu.cycles != 0);
-                do { gb.step(); } while (gb.cpu.cycles == 0);
+                gb.step();
             }
             if (GetKey(olc::Key::F).bPressed) {
                 do { gb.step(); } while (!gb.gpu.frameDone);

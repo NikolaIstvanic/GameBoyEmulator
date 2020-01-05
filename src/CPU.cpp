@@ -105,23 +105,26 @@ CPU::CPU() {
         {"RLC (HL)", &CPU::RLCmHL, 16}, {"RLC A", &CPU::RLC_A, 8}, {"RRC B", &CPU::RRCB, 8},
         {"RRC C", &CPU::RRCC, 8}, {"RRC D", &CPU::RRCD, 8}, {"RRC E", &CPU::RRCE, 8},
         {"RRC H", &CPU::RRCH, 8}, {"RRC L", &CPU::RRCL, 8}, {"RRC (HL)", &CPU::RRCmHL, 16},
-        {"RRC A", &CPU::RRC_A, 8}, {"RL B", &CPU::RLB, 8}, {"RL C", &CPU::RLC, 8},
-        {"RL D", &CPU::RLD, 8}, {"RL E", &CPU::RLE, 8}, {"RL H", &CPU::RLH, 8},
-        {"RL L", &CPU::RLL, 8}, {"RL (HL)", &CPU::RLmHL, 16}, {"RL A", &CPU::RL_A, 8},
-        {"RR B", &CPU::RRB, 8}, {"RR C", &CPU::RRC, 8}, {"RR D", &CPU::RRD, 8},
-        {"RR E", &CPU::RRE, 8}, {"RR H", &CPU::RRH, 8}, {"RR L", &CPU::RRL, 8},
-        {"RR (HL)", &CPU::RRmHL, 16}, {"RR A", &CPU::RR_A, 8}, {"SLA B", &CPU::SLAB, 8},
-        {"SLA C", &CPU::SLAC, 8}, {"SLA D", &CPU::SLAD, 8}, {"SLA E", &CPU::SLAE, 8},
-        {"SLA H", &CPU::SLAH, 8}, {"SLA L", &CPU::SLAL, 8}, {"SLA (HL)", &CPU::SLAmHL, 16},
-        {"SLA A", &CPU::SLAA, 8}, {"SRA B", &CPU::SRAB, 8}, {"SRA C", &CPU::SRAC, 8},
-        {"SRA D", &CPU::SRAD, 8}, {"SRA E", &CPU::SRAE, 8}, {"SRA H", &CPU::SRAH, 8},
-        {"SRA L", &CPU::SRAL, 8}, {"SRA (HL)", &CPU::SRAmHL, 16}, {"SRA A", &CPU::SRAA, 8},
+        {"RRC A", &CPU::RRC_A, 8},
+        {"RL B", &CPU::RLB, 8}, {"RL C", &CPU::RLC, 8}, {"RL D", &CPU::RLD, 8},
+        {"RL E", &CPU::RLE, 8}, {"RL H", &CPU::RLH, 8}, {"RL L", &CPU::RLL, 8},
+        {"RL (HL)", &CPU::RLmHL, 16}, {"RL A", &CPU::RL_A, 8}, {"RR B", &CPU::RRB, 8},
+        {"RR C", &CPU::RRC, 8}, {"RR D", &CPU::RRD, 8}, {"RR E", &CPU::RRE, 8},
+        {"RR H", &CPU::RRH, 8}, {"RR L", &CPU::RRL, 8}, {"RR (HL)", &CPU::RRmHL, 16},
+        {"RR A", &CPU::RR_A, 8},
+        {"SLA B", &CPU::SLAB, 8}, {"SLA C", &CPU::SLAC, 8}, {"SLA D", &CPU::SLAD, 8},
+        {"SLA E", &CPU::SLAE, 8}, {"SLA H", &CPU::SLAH, 8}, {"SLA L", &CPU::SLAL, 8},
+        {"SLA (HL)", &CPU::SLAmHL, 16}, {"SLA A", &CPU::SLAA, 8}, {"SRA B", &CPU::SRAB, 8},
+        {"SRA C", &CPU::SRAC, 8}, {"SRA D", &CPU::SRAD, 8}, {"SRA E", &CPU::SRAE, 8},
+        {"SRA H", &CPU::SRAH, 8}, {"SRA L", &CPU::SRAL, 8}, {"SRA (HL)", &CPU::SRAmHL, 16},
+        {"SRA A", &CPU::SRAA, 8},
         {"SWAP B", &CPU::SWAPB, 8}, {"SWAP C", &CPU::SWAPC, 8}, {"SWAP D", &CPU::SWAPD, 8},
         {"SWAP E", &CPU::SWAPE, 8}, {"SWAP H", &CPU::SWAPH, 8}, {"SWAP L", &CPU::SWAPL, 8},
         {"SWAP (HL)", &CPU::SWAPmHL, 16}, {"SWAP A", &CPU::SWAPA, 8}, {"SRL B", &CPU::SRLB, 8},
         {"SRL C", &CPU::SRLC, 8}, {"SRL D", &CPU::SRLD, 8}, {"SRL E", &CPU::SRLE, 8},
         {"SRL H", &CPU::SRLH, 8}, {"SRL L", &CPU::SRLL, 8}, {"SRL (HL)", &CPU::SRLmHL, 16},
-        {"SRL A", &CPU::SRLA, 8}, {"BIT 0,B", &CPU::BIT0B, 8}, {"BIT 0,C", &CPU::BIT0C, 8},
+        {"SRL A", &CPU::SRLA, 8},
+        {"BIT 0,B", &CPU::BIT0B, 8}, {"BIT 0,C", &CPU::BIT0C, 8},
         {"BIT 0,D", &CPU::BIT0D, 8}, {"BIT 0,E", &CPU::BIT0E, 8}, {"BIT 0,H", &CPU::BIT0H, 8},
         {"BIT 0,L", &CPU::BIT0L, 8}, {"BIT 0,(HL)", &CPU::BIT0mHL, 16}, {"BIT 0,A", &CPU::BIT0A, 8},
         {"BIT 1,B", &CPU::BIT1B, 8}, {"BIT 1,C", &CPU::BIT1C, 8}, {"BIT 1,D", &CPU::BIT1D, 8},
@@ -193,17 +196,19 @@ CPU::CPU() {
  * @brief Operations to perform upon receiving a reset signal
  */
 void CPU::reset() {
-    PC = 0x00100;
+    PC = 0x0100;
     AF.r = 0x0000;
     BC.r = 0x0000;
     DE.r = 0x0000;
     HL.r = 0x0000;
     SP = 0xFFFE;
     intMaster = true;
+    intFlags = 0x00;
+    intEnable = 0x00;
     stop = false;
     halt = false;
     cycles = 0;
-    //timer.reset();
+    timer.reset();
 }
 
 /**
@@ -214,29 +219,54 @@ void CPU::reset() {
  * opcode. After this, the number of cycles that instruction takes on the actual
  * MOS 6507 microprocessor is saved; this value is used for timing purposes.
  */
-void CPU::step() {
-    if (cycles == 0) {
-        if (stop) {
-            return;
-        }
+uint8_t CPU::step() {
+    stepInterrupt();
 
-        if (halt) {
-            // Halt until interrupt occurs
-            // service it and then instruction after halt
-            // is executed. If DI, then halt doesn't suspend
-            // but skips instruction right after halt
-            return;
-        }
-        opcode = fetch();
-        logInfo();
-        cycles = this->instruction_rom[opcode].cycles;
-        (this->*instruction_rom[opcode].op)();
+    if (stop) {
+        return 0x01;
     }
-    //timer.step();
-    cycles--;
+    if (halt) {
+        return handleHalt();
+    }
+    opcode = fetch();
+    cycles = this->instruction_rom[opcode].cycles;
+    (this->*instruction_rom[opcode].op)();
+    logInfo();
+    return cycles;
 }
 
-#define DEBUG
+uint8_t CPU::handleHalt() {
+    if (intMaster) {
+        if (intEnable & intFlags) {
+            halt = false;
+            push16(PC + 1);
+            return 0x01;
+        }
+        opcode = 0x00; // simulate NOP
+        cycles = this->instruction_rom[opcode].cycles;
+        (this->*instruction_rom[opcode].op)();
+        return cycles;
+    }
+    if (intEnable & intFlags) {
+        // Halt bug
+        uint16_t pc = PC;
+        halt = false;
+        opcode = fetch();
+        cycles = this->instruction_rom[opcode].cycles;
+        (this->*instruction_rom[opcode].op)();
+        PC = pc;
+        opcode = fetch();
+        cycles = this->instruction_rom[opcode].cycles;
+        (this->*instruction_rom[opcode].op)();
+        return cycles;
+    }
+    opcode = 0x00;
+    cycles = this->instruction_rom[opcode].cycles;
+    (this->*instruction_rom[opcode].op)();
+    return cycles;
+}
+
+//#define DEBUG
 
 /**
  * @brief Print diagnostic information for debugging CPU execution.
@@ -251,8 +281,8 @@ inline void CPU::logInfo() const {
         << (int) BC.r << " DE: 0x" << std::setw(4) << std::hex << (int) DE.r
         << " HL: 0x" << std::setw(4) << std::hex << (int) HL.r << " SP: 0x"
         << std::setw(4) << std::hex << (int) SP << " IM: " << (int) intMaster
-        << " IF: 0x" << std::setw(4) << std::hex << (int) gb->intFlags
-        << " IE: 0x" << std::setw(4) << std::hex << (int) gb->intEnable
+        << " IF: 0x" << std::setw(4) << std::hex << (int) intFlags
+        << " IE: 0x" << std::setw(4) << std::hex << (int) intEnable
         << std::endl;
 #endif
 }
@@ -281,42 +311,77 @@ inline void CPU::setZEROSIGN(uint8_t value) {
     value & SIGN ? setBit(SIGN) : clrBit(SIGN);
 }
 
+void CPU::stepInterrupt() {
+    if (intMaster) {
+        uint8_t on = intEnable & intFlags;
+
+        if (on) {
+            intMaster = false;
+            push16(PC);
+            gb->gpu.clocks += 12;
+
+            if (on & INT_VBLANK) {
+                intFlags &= ~INT_VBLANK;
+                vblankISR();
+            } else if (on & INT_LCDC) {
+                intFlags &= ~INT_LCDC;
+                lcdcISR();
+            } else if (on & INT_TIMER) {
+                intFlags &= ~INT_TIMER;
+                timerISR();
+            } else if (on & INT_SERIAL) {
+                intFlags &= ~INT_SERIAL;
+                serialISR();
+            } else if (on & INT_HITOLO) {
+                intFlags &= ~INT_HITOLO;
+                hitoloISR();
+            }
+        }
+    }
+}
+
+void CPU::vblankISR() {
+    PC = PC_VBLANK;
+    gb->gpu.updateScreen();
+}
+
+void CPU::lcdcISR() { PC = PC_LCDC; }
+void CPU::timerISR() { PC = PC_TIMER; }
+void CPU::serialISR() { PC = PC_SERIAL; }
+void CPU::hitoloISR() { PC = PC_HITOLO; }
 uint8_t CPU::read8(uint16_t addr) { return gb->read8(addr); }
 uint16_t CPU::read16(uint16_t addr) { return gb->read16(addr); }
 void CPU::write8(uint16_t addr, uint8_t data) { gb->write8(addr, data); }
 void CPU::write16(uint16_t addr, uint16_t data) { gb->write16(addr, data); }
-uint8_t CPU::pop8() { return read8(++SP); }
 
 uint16_t CPU::pop16() {
-    uint16_t data = read16(++SP);
-    SP++;
-    return data;
+    uint16_t r = read16(SP);
+    SP += 2;
+    return r;
 }
-
-void CPU::push8(uint8_t data) { write8(SP--, data); }
 
 void CPU::push16(uint16_t data) {
-    write16(--SP, data);
-    SP--;
+    SP -= 2;
+    write16(SP, data);
 }
 
-uint8_t CPU::_add8(uint8_t operand) {
+void CPU::_add8(uint8_t operand) {
     uint16_t sum = AF.r1 + operand;
     (((AF.r1 & 0x0F) + (operand & 0x0F)) > 0x0F) ? setBit(HALF)
         : clrBit(HALF);
     sum & 0x0100 ? setBit(CARRY) : clrBit(CARRY);
-    sum ? clrBit(ZERO) : setBit(ZERO);
+    sum & 0x00FF ? clrBit(ZERO) : setBit(ZERO);
     clrBit(SIGN);
-    return sum & 0xFF;
+    AF.r1 = sum & 0xFF;
 }
 
-uint16_t CPU::_add16(uint16_t operand) {
+void CPU::_add16(uint16_t operand) {
     uint32_t sum = HL.r + operand;
     sum & 0x10000 ? setBit(CARRY) : clrBit(CARRY);
     (((HL.r & 0x0FFF) + (operand & 0x0FFF)) > 0x0FFF) ? setBit(HALF)
         : clrBit(HALF);
     clrBit(SIGN);
-    return sum & 0xFFFF;
+    HL.r = sum & 0xFFFF;
 }
 
 void CPU::_adc(uint8_t operand) {
@@ -383,7 +448,7 @@ void CPU::_inc(uint8_t& operand) {
 
 void CPU::_dec(uint8_t& operand) {
     operand--;
-    (operand & 0x10) == 0x10 ? setBit(HALF) : clrBit(HALF);
+    (operand & 0x0F) == 0x0F ? setBit(HALF) : clrBit(HALF);
     operand ? clrBit(ZERO) : setBit(ZERO);
     setBit(SIGN);
 }
@@ -486,7 +551,7 @@ void CPU::LDmnnSP() {
     PC += 2;
 }
 
-void CPU::ADDHLBC() { HL.r = _add16(BC.r); }
+void CPU::ADDHLBC() { _add16(BC.r); }
 void CPU::LDAmBC() { AF.r1 = read8(BC.r); }
 void CPU::DECBC() { BC.r--; }
 void CPU::INCC() { _inc(BC.r2); }
@@ -521,7 +586,7 @@ void CPU::RLA() {
 }
 
 void CPU::JRn() { PC += (int8_t) fetch(); }
-void CPU::ADDHLDE() { HL.r = _add16(DE.r); }
+void CPU::ADDHLDE() { _add16(DE.r); }
 void CPU::LDAmDE() { AF.r1 = read8(DE.r); }
 void CPU::DECDE() { DE.r--; }
 void CPU::INCE() { _inc(DE.r2); }
@@ -529,7 +594,7 @@ void CPU::DECE() { _dec(DE.r2); }
 void CPU::LDEn() { DE.r2 = fetch(); }
 
 void CPU::RRA() {
-    uint8_t carry = (AF.r2 & CARRY) ? 0x80 : 0;
+    uint8_t carry = (AF.r2 & CARRY) ? 0x80 : 0x00;
     (AF.r1 & 0x01) ? setBit(CARRY) : clrBit(CARRY);
     AF.r1 = (AF.r1 >> 1) | carry;
     clrBit(HALF | SIGN | ZERO);
@@ -589,7 +654,7 @@ void CPU::JRzn() {
     }
 }
 
-void CPU::ADDHLHL() { HL.r = _add16(HL.r); }
+void CPU::ADDHLHL() { _add16(HL.r); }
 void CPU::LDAmHLp() { AF.r1 = read8(HL.r++); }
 void CPU::DECHL() { HL.r--; }
 void CPU::INCL() { _inc(HL.r2); }
@@ -644,7 +709,7 @@ void CPU::JRcn() {
     }
 }
 
-void CPU::ADDHLSP() { HL.r = _add16(SP); }
+void CPU::ADDHLSP() { _add16(SP); }
 void CPU::LDAmHLm() { AF.r1 = read8(HL.r--); }
 void CPU::DECSP() { SP--; }
 void CPU::INCA() { _inc(AF.r1); }
@@ -720,14 +785,14 @@ void CPU::LDAH() { AF.r1 = HL.r1; }
 void CPU::LDAL() { AF.r1 = HL.r2; }
 void CPU::LDAmHL() { AF.r1 = read8(HL.r); }
 void CPU::LDAA() { AF.r1 = AF.r1; }
-void CPU::ADDAB() { AF.r1 = _add8(BC.r1); }
-void CPU::ADDAC() { AF.r1 = _add8(BC.r2); }
-void CPU::ADDAD() { AF.r1 = _add8(DE.r1); }
-void CPU::ADDAE() { AF.r1 = _add8(DE.r2); }
-void CPU::ADDAH() { AF.r1 = _add8(HL.r1); }
-void CPU::ADDAL() { AF.r1 = _add8(HL.r2); }
-void CPU::ADDAmHL() { AF.r1 = _add8(read8(HL.r)); }
-void CPU::ADDAA() { AF.r1 = _add8(AF.r1); }
+void CPU::ADDAB() { _add8(BC.r1); }
+void CPU::ADDAC() { _add8(BC.r2); }
+void CPU::ADDAD() { _add8(DE.r1); }
+void CPU::ADDAE() { _add8(DE.r2); }
+void CPU::ADDAH() { _add8(HL.r1); }
+void CPU::ADDAL() { _add8(HL.r2); }
+void CPU::ADDAmHL() { _add8(read8(HL.r)); }
+void CPU::ADDAA() { _add8(AF.r1); }
 void CPU::ADCAB() { _adc(BC.r1); }
 void CPU::ADCAC() { _adc(BC.r2); }
 void CPU::ADCAD() { _adc(DE.r1); }
@@ -816,7 +881,7 @@ void CPU::CALLnznn() {
 }
 
 void CPU::PUSHBC() { push16(BC.r); }
-void CPU::ADDAn() { AF.r1 = _add8(fetch()); }
+void CPU::ADDAn() { _add8(fetch()); }
 
 void CPU::RST00H() {
     push16(PC);
@@ -842,9 +907,9 @@ void CPU::JPznn() {
 }
 
 void CPU::CBn() {
-    uint8_t op = fetch();
-    (*this.*cb_rom[op].op)();
-    cycles += cb_rom[op].cycles;
+    opcode = fetch();
+    (*this.*cb_rom[opcode].op)();
+    cycles += cb_rom[opcode].cycles;
 }
 
 void CPU::CALLznn() {
@@ -991,7 +1056,7 @@ void CPU::POPAF() {
 }
 
 void CPU::LDAmC() { AF.r1 = read8(0xFF00 + BC.r2); }
-void CPU::DI() { gb->intMaster = false; }
+void CPU::DI() { intMaster = false; }
 void CPU::PUSHAF() { push16(AF.r); }
 void CPU::ORn() { _or(fetch()); }
 
@@ -1020,7 +1085,7 @@ void CPU::LDAmnn() {
     AF.r1 = read8(operand);
 }
 
-void CPU::EI() { gb->intMaster = true; }
+void CPU::EI() { intMaster = true; }
 void CPU::CPn() { _cp(fetch()); }
 
 void CPU::RST38H() {
@@ -1259,7 +1324,7 @@ void CPU::RES0E() { DE.r2 &= ~0x01; }
 void CPU::RES0H() { HL.r1 &= ~0x01; }
 void CPU::RES0L() { HL.r2 &= ~0x01; }
 void CPU::RES0mHL() { write8(HL.r, read8(HL.r) & ~0x01); }
-void CPU::RES0A() { AF.r1 &= ~0x02; }
+void CPU::RES0A() { AF.r1 &= ~0x01; }
 void CPU::RES1B() { BC.r1 &= ~0x02; }
 void CPU::RES1C() { BC.r2 &= ~0x02; }
 void CPU::RES1D() { DE.r1 &= ~0x02; }
@@ -1333,7 +1398,7 @@ void CPU::SET0A() { _setBit(1, AF.r1); }
 void CPU::SET1B() { _setBit(2, BC.r1); }
 void CPU::SET1C() { _setBit(2, BC.r2); }
 void CPU::SET1D() { _setBit(2, DE.r1); }
-void CPU::SET1E() { _setBit(2, DE.r2); }
+void CPU::SET1E() { exit(1); _setBit(2, DE.r2); }
 void CPU::SET1H() { _setBit(2, HL.r1); }
 void CPU::SET1L() { _setBit(2, HL.r2); }
 

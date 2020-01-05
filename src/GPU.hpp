@@ -22,7 +22,7 @@ class GPU {
         void reset();
         void connectGameBoy(GameBoy* g) { gb = g; }
         olc::Sprite& getScreen();
-        void step();
+        void step(uint8_t cpuCycles);
         void updateTile(uint16_t addr, uint8_t data);
         void updateScreen();
 
@@ -52,8 +52,8 @@ class GPU {
     private:
 
         struct gpuSprite {
-            uint8_t x;
             uint8_t y;
+            uint8_t x;
             uint8_t tile;
             uint8_t priority : 1;
             uint8_t vFlip : 1;

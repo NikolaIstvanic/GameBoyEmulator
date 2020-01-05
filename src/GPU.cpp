@@ -38,8 +38,8 @@ void GPU::reset() {
 
 olc::Sprite& GPU::getScreen() { return sprScreen; }
 
-void GPU::step() {
-    clocks++;
+void GPU::step(uint8_t cpuCycles) {
+    clocks += cpuCycles;
 
     switch (state) {
         case HBLANK:
@@ -47,15 +47,15 @@ void GPU::step() {
                 scanline++;
                 if (scanline == 144) {
                     // request vblank interrupt
-                    gb->intFlags |= INT_VBLANK;
+                    gb->cpu.intFlags |= INT_VBLANK;
                     state = VBLANK;
                     lcdStatus &= ~0x1;
                     lcdStatus |= 0x2;
                     frameDone = true;
                 } else {
+                    state = OAM;
                     lcdStatus |= 0x2;
                     lcdStatus &= ~0x1;
-                    state = OAM;
                 }
                 clocks -= 204;
             }
@@ -66,9 +66,9 @@ void GPU::step() {
                 scanline++;
                 if (scanline > 153) {
                     scanline = 0;
-                    state = OAM;
                     lcdStatus |= 0x2;
                     lcdStatus &= ~0x1;
+                    state = OAM;
                 }
                 clocks -= 456;
             }
@@ -76,10 +76,10 @@ void GPU::step() {
 
         case OAM:
             if (clocks >= 80) {
-                state = VRAM;
                 clocks -= 80;
                 lcdStatus |= 0x2;
                 lcdStatus &= ~0x1;
+                state = VRAM;
             }
             break;
 
@@ -89,12 +89,12 @@ void GPU::step() {
                 updateScreen();
                 clocks -= 172;
                 if (lcdStatus & 0x08) {
-                    gb->intFlags |= INT_LCDC;
+                    gb->cpu.intFlags |= INT_LCDC;
                 }
                 uint8_t lyCoincidenceInt = lcdStatus & 0x40;
                 uint8_t lyCoincidence = lyCompare == scanline;
                 if (lyCoincidenceInt && lyCoincidence) {
-                    gb->intFlags |= INT_LCDC;
+                    gb->cpu.intFlags |= INT_LCDC;
                 }
                 lyCoincidence ? lcdStatus |= 0x4 : lcdStatus &= ~0x4;
                 lcdStatus &= ~0x2;

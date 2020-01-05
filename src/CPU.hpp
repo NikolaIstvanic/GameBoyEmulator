@@ -3,7 +3,19 @@
 #include <array>
 #include <cstdint>
 
-//#include "Timer.hpp"
+#include "Timer.hpp"
+
+#define INT_VBLANK 0x01
+#define INT_LCDC   0x02
+#define INT_TIMER  0x04
+#define INT_SERIAL 0x08
+#define INT_HITOLO 0x10
+
+#define PC_VBLANK 0x0040
+#define PC_LCDC   0x0048
+#define PC_TIMER  0x0050
+#define PC_SERIAL 0x0058
+#define PC_HITOLO 0x0060
 
 class GameBoy;
 
@@ -11,14 +23,20 @@ class CPU {
     public:
         CPU();
         ~CPU() = default;
-        void connectGameBoy(GameBoy* g) { gb = g; /*timer.connectGameBoy(g);*/ }
+        void connectGameBoy(GameBoy* g) {
+            gb = g;
+            timer.connectGameBoy(g);
+            div.connectGameBoy(g);
+        }
         void reset();
-        void step();
+        uint8_t step();
 
-        void push8(uint8_t data);
         void push16(uint16_t data);
         
         uint8_t cycles = 0;
+
+        Timer timer;
+        Timer div;
 
         // STATUS REGISTER VALUES
         enum CPUFLAG {
@@ -36,27 +54,35 @@ class CPU {
 
         //Interrupt logic
         uint8_t intMaster = true;
+        uint8_t intEnable = 0x00;
+        uint8_t intFlags = 0x00;
 
         // Program Counter address register
         uint16_t PC = 0x0000;
 
     private:
+        uint8_t handleHalt();
         inline void logInfo() const;
         inline uint8_t fetch();
         inline uint16_t relativeOffset(uint8_t offset) const;
         inline void setBit(uint8_t f);
         inline void clrBit(uint8_t f);
         inline void setZEROSIGN(uint8_t value);
+        void stepInterrupt();
+        void vblankISR();
+        void lcdcISR();
+        void timerISR();
+        void serialISR();
+        void hitoloISR();
 
         void write8(uint16_t addr, uint8_t data);
         void write16(uint16_t addr, uint16_t data);
         uint8_t read8(uint16_t addr);
         uint16_t read16(uint16_t addr);
-        uint8_t pop8();
         uint16_t pop16();
 
-        uint8_t _add8(uint8_t operand);
-        uint16_t _add16(uint16_t operand);
+        void _add8(uint8_t operand);
+        void _add16(uint16_t operand);
         void _adc(uint8_t operand);
         void _sub(uint8_t operand);
         void _sbc(uint8_t operand);
@@ -158,7 +184,6 @@ class CPU {
         void SET6B(); void SET6C(); void SET6D(); void SET6E(); void SET6H(); void SET6L(); void SET6mHL(); void SET6A();
         void SET7B(); void SET7C(); void SET7D(); void SET7E(); void SET7H(); void SET7L(); void SET7mHL(); void SET7A();
 
-        //Timer timer;
         GameBoy* gb;
         uint8_t additional_cycle = 0;
 
