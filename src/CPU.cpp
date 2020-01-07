@@ -7,6 +7,8 @@
 #include "GameBoy.hpp"
 #include "CPU.hpp"
 
+#define PAIR(_reg1, _reg2) ((uint16_t) ((_reg1) << 8) | (_reg2))
+
 CPU::CPU() {
     instruction_rom = {{
         {"NOP", &CPU::NOP, 4}, {"LD BC,nn", &CPU::LDBCnn, 12}, {"LD (BC),A", &CPU::LDmBCA, 8},
@@ -196,11 +198,15 @@ CPU::CPU() {
  * @brief Operations to perform upon receiving a reset signal
  */
 void CPU::reset() {
+    A = 0x00;
+    B = 0x00;
+    C = 0x00;
+    D = 0x00;
+    E = 0x00;
+    F = 0x00;
+    H = 0x00;
+    L = 0x00;
     PC = 0x0100;
-    AF.r = 0x0000;
-    BC.r = 0x0000;
-    DE.r = 0x0000;
-    HL.r = 0x0000;
     SP = 0xFFFE;
     intMaster = true;
     intFlags = 0x00;
@@ -226,7 +232,8 @@ uint8_t CPU::step() {
         return 0x01;
     }
     if (halt) {
-        return handleHalt();
+        //return handleHalt();
+        return 0x01;
     }
     opcode = fetch();
     cycles = this->instruction_rom[opcode].cycles;
@@ -277,13 +284,13 @@ inline void CPU::logInfo() const {
         << std::setw(10) << (opcode == 0xCB ? cb_rom[opcode].name
         : instruction_rom[opcode].name) << " (0x"
         << std::setw(2) << std::hex << (int) opcode << ") AF: 0x" << std::setw(4)
-        << std::hex << (int) AF.r << " BC: 0x" << std::setw(4) << std::hex
-        << (int) BC.r << " DE: 0x" << std::setw(4) << std::hex << (int) DE.r
-        << " HL: 0x" << std::setw(4) << std::hex << (int) HL.r << " SP: 0x"
-        << std::setw(4) << std::hex << (int) SP << " IM: " << (int) intMaster
-        << " IF: 0x" << std::setw(4) << std::hex << (int) intFlags
-        << " IE: 0x" << std::setw(4) << std::hex << (int) intEnable
-        << std::endl;
+        << std::hex << (int) PAIR(A, F) << " BC: 0x" << std::setw(4) << std::hex
+        << (int) PAIR(B, C) << " DE: 0x" << std::setw(4) << std::hex
+        << (int) PAIR(D, E) << " HL: 0x" << std::setw(4) << std::hex
+        << (int) PAIR(H, L) << " SP: 0x" << std::setw(4) << std::hex
+        << (int) SP << " IM: " << (int) intMaster << " IF: 0x" << std::setw(4)
+        << std::hex << (int) intFlags << " IE: 0x" << std::setw(4) << std::hex
+        << (int) intEnable << std::endl;
 #endif
 }
 
@@ -291,25 +298,8 @@ inline void CPU::logInfo() const {
  * @brief Fetch the next byte from RAM pointed to by the CPU's PC register.
  */
 inline uint8_t CPU::fetch() { return read8(PC++); }
-
-/**
- * @brief If negative, return offset and subtract 0x0100; otherwise just return
- * offset.
- */
-inline uint16_t CPU::relativeOffset(uint8_t offset) const {
-    return (uint16_t) offset + (((offset & SIGN) >> 7) * -0x0100);
-}
-
-inline void CPU::setBit(uint8_t f) { AF.r2 |= f; }
-inline void CPU::clrBit(uint8_t f) { AF.r2 &= ~f; }
-
-/**
- * @brief Set the ZERO and SIGN flags of the status register for the given parameter.
- */
-inline void CPU::setZEROSIGN(uint8_t value) {
-    value ? clrBit(ZERO) : setBit(ZERO);
-    value & SIGN ? setBit(SIGN) : clrBit(SIGN);
-}
+inline void CPU::setBit(uint8_t f) { F |= f; }
+inline void CPU::clrBit(uint8_t f) { F &= ~f; }
 
 void CPU::stepInterrupt() {
     if (intMaster) {
@@ -366,150 +356,161 @@ void CPU::push16(uint16_t data) {
 }
 
 void CPU::_add8(uint8_t operand) {
-    uint16_t sum = AF.r1 + operand;
-    (((AF.r1 & 0x0F) + (operand & 0x0F)) > 0x0F) ? setBit(HALF)
+    uint16_t sum = A + operand;
+    (((A & 0x0F) + (operand & 0x0F)) > 0x0F) ? setBit(HALF)
         : clrBit(HALF);
     sum & 0x0100 ? setBit(CARRY) : clrBit(CARRY);
     sum & 0x00FF ? clrBit(ZERO) : setBit(ZERO);
     clrBit(SIGN);
-    AF.r1 = sum & 0xFF;
+    A = sum & 0x00FF;
 }
 
 void CPU::_add16(uint16_t operand) {
-    uint32_t sum = HL.r + operand;
+    uint32_t sum = PAIR(H, L) + operand;
     sum & 0x10000 ? setBit(CARRY) : clrBit(CARRY);
-    (((HL.r & 0x0FFF) + (operand & 0x0FFF)) > 0x0FFF) ? setBit(HALF)
+    (((PAIR(H, L) & 0x0FFF) + (operand & 0x0FFF)) > 0x0FFF) ? setBit(HALF)
         : clrBit(HALF);
     clrBit(SIGN);
-    HL.r = sum & 0xFFFF;
+    H = (sum & 0xFF00) >> 8;
+    L = sum & 0x00FF;
 }
 
 void CPU::_adc(uint8_t operand) {
-    uint8_t carry = (AF.r2 & CARRY) ? 1 : 0;
-    uint16_t a = operand + AF.r1 + carry;
+    uint8_t carry = (F & CARRY) ? 1 : 0;
+    uint16_t a = operand + A + carry;
     a > 0xFF ? setBit(CARRY) : clrBit(CARRY);
-    (((AF.r1 & 0x0F) + (operand & 0x0F) + carry) > 0x0F) ? setBit(HALF)
+    (((A & 0x0F) + (operand & 0x0F) + carry) > 0x0F) ? setBit(HALF)
         : clrBit(HALF);
-    AF.r1 = a & 0xFF;
-    AF.r1 ? clrBit(ZERO) : setBit(ZERO);
+    A = a & 0x00FF;
+    A ? clrBit(ZERO) : setBit(ZERO);
     clrBit(SIGN);
 }
 
 void CPU::_sub(uint8_t operand) {
-    operand > AF.r1 ? setBit(CARRY) : clrBit(CARRY);
-    (operand & 0x0F) > (AF.r1 & 0x0F) ? setBit(HALF) : clrBit(HALF);
-    AF.r1 -= operand;
-    AF.r1 ? clrBit(ZERO) : setBit(ZERO);
+    operand > A ? setBit(CARRY) : clrBit(CARRY);
+    (operand & 0x0F) > (A & 0x0F) ? setBit(HALF) : clrBit(HALF);
+    A -= operand;
+    A ? clrBit(ZERO) : setBit(ZERO);
     setBit(SIGN);
 }
 
 void CPU::_sbc(uint8_t operand) {
-    uint8_t carry = (AF.r2 & CARRY) ? 1 : 0;
-    int16_t diff = AF.r1 - operand - carry;
-    ((AF.r1 & 0x0F) - (operand & 0x0F) - carry) < 0x00 ? setBit(HALF) : clrBit(HALF);
+    uint8_t carry = (F & CARRY) ? 1 : 0;
+    int16_t diff = A - operand - carry;
+    ((A & 0x0F) - (operand & 0x0F) - carry) < 0x00 ? setBit(HALF) : clrBit(HALF);
     diff < 0x00 ? setBit(CARRY) : clrBit(CARRY);
-    AF.r1 = diff & 0xFF;
-    AF.r1 ? clrBit(ZERO) : setBit(ZERO);
+    A = diff & 0x00FF;
+    A ? clrBit(ZERO) : setBit(ZERO);
     setBit(SIGN);
 }
 
 void CPU::_and(uint8_t operand) {
-    AF.r1 &= operand;
-    AF.r1 ? clrBit(ZERO) : setBit(ZERO);
+    A &= operand;
+    A ? clrBit(ZERO) : setBit(ZERO);
     setBit(HALF);
     clrBit(SIGN | CARRY);
 }
 
 void CPU::_xor(uint8_t operand) {
-    AF.r1 ^= operand;
-    AF.r1 ? clrBit(ZERO) : setBit(ZERO);
+    A ^= operand;
+    A ? clrBit(ZERO) : setBit(ZERO);
     clrBit(SIGN | CARRY | HALF);
 }
 
 void CPU::_or(uint8_t operand) {
-    AF.r1 |= operand;
-    AF.r1 ? clrBit(ZERO) : setBit(ZERO);
+    A |= operand;
+    A ? clrBit(ZERO) : setBit(ZERO);
     clrBit(SIGN | CARRY | HALF);
 }
 
 void CPU::_cp(uint8_t operand) {
-    AF.r1 == operand ? setBit(ZERO) : clrBit(ZERO);
-    operand > AF.r1 ? setBit(CARRY) : clrBit(CARRY);
-    (operand & 0x0F) > (AF.r1 & 0x0F) ? setBit(HALF) : clrBit(HALF);
+    A == operand ? setBit(ZERO) : clrBit(ZERO);
+    operand > A ? setBit(CARRY) : clrBit(CARRY);
+    (operand & 0x0F) > (A & 0x0F) ? setBit(HALF) : clrBit(HALF);
     setBit(SIGN);
 }
 
-void CPU::_inc(uint8_t& operand) {
+uint8_t CPU::_inc(uint8_t operand) {
     operand++;
     (operand & 0x0F) == 0x00 ? setBit(HALF) : clrBit(HALF);
     operand ? clrBit(ZERO) : setBit(ZERO);
     clrBit(SIGN);
+    return operand;
 }
 
-void CPU::_dec(uint8_t& operand) {
+uint8_t CPU::_dec(uint8_t operand) {
     operand--;
     (operand & 0x0F) == 0x0F ? setBit(HALF) : clrBit(HALF);
     operand ? clrBit(ZERO) : setBit(ZERO);
     setBit(SIGN);
+    return operand;
 }
 
-void CPU::_rlc(uint8_t& operand) {
+uint8_t CPU::_rlc(uint8_t operand) {
     uint8_t carry = (operand & 0x80) >> 7;
     carry ? setBit(CARRY) : clrBit(CARRY);
     operand = (operand << 1) | carry;
     operand ? clrBit(ZERO) : setBit(ZERO);
     clrBit(SIGN | HALF);
+    return operand;
 }
 
-void CPU::_rrc(uint8_t& operand) {
-    uint8_t carry = (operand & 0x1) << 7;
+uint8_t CPU::_rrc(uint8_t operand) {
+    uint8_t carry = (operand & 0x01) << 7;
     carry ? setBit(CARRY) : clrBit(CARRY);
     operand = (operand >> 1) | carry;
     operand ? clrBit(ZERO) : setBit(ZERO);
     clrBit(SIGN | HALF);
+    return operand;
 }
 
-void CPU::_rl(uint8_t& operand) {
-    uint8_t carry = (AF.r2 & CARRY) ? 1 : 0;
+uint8_t CPU::_rl(uint8_t operand) {
+    uint8_t carry = (F & CARRY) ? 1 : 0;
     operand & 0x80 ? setBit(CARRY) : clrBit(CARRY);
     operand = (operand << 1) | carry;
     operand ? clrBit(ZERO) : setBit(ZERO);
     clrBit(SIGN | HALF);
+    return operand;
 }
 
-void CPU::_rr(uint8_t& operand) {
-    uint8_t carry = (AF.r2 & CARRY) ? 0x80 : 0x00;
+uint8_t CPU::_rr(uint8_t operand) {
+    uint8_t carry = (F & CARRY) ? 0x80 : 0x00;
     operand & 0x01 ? setBit(CARRY) : clrBit(CARRY);
     operand = (operand >> 1) | carry;
     operand ? clrBit(ZERO) : setBit(ZERO);
     clrBit(SIGN | HALF);
+    return operand;
 }
 
-void CPU::_sla(uint8_t& operand) {
+uint8_t CPU::_sla(uint8_t operand) {
     operand & 0x80 ? setBit(CARRY) : clrBit(CARRY);
     operand <<= 1;
     operand ? clrBit(ZERO) : setBit(ZERO);
     clrBit(SIGN | HALF);
+    return operand;
 }
 
-void CPU::_sra(uint8_t& operand) {
+uint8_t CPU::_sra(uint8_t operand) {
     operand & 0x01 ? setBit(CARRY) : clrBit(CARRY);
     operand = (operand & 0x80) | (operand >> 1);
     operand ? clrBit(ZERO) : setBit(ZERO);
     clrBit(SIGN | HALF);
+    return operand;
 }
 
-void CPU::_swap(uint8_t& operand) {
+uint8_t CPU::_swap(uint8_t operand) {
     operand = ((operand & 0x0F) << 4) | ((operand & 0xF0) >> 4);
     operand ? clrBit(ZERO) : setBit(ZERO);
     clrBit(SIGN | CARRY | HALF);
+    return operand;
 }
 
-void CPU::_srl(uint8_t& operand) {
+uint8_t CPU::_srl(uint8_t operand) {
     operand & 0x01 ? setBit(CARRY) : clrBit(CARRY);
     operand >>= 1;
     operand ? clrBit(ZERO) : setBit(ZERO);
     clrBit(SIGN | HALF);
+    return operand;
 }
 
 void CPU::_bit(uint8_t mask, uint8_t operand) {
@@ -529,20 +530,27 @@ void CPU::PANIC() {
 void CPU::NOP() { }
 
 void CPU::LDBCnn() {
-    BC.r = read16(PC);
+    uint16_t operand = read16(PC);
     PC += 2;
+    B = (operand & 0xFF00) >> 8;
+    C = operand & 0x00FF;
 }
 
-void CPU::LDmBCA() { write8(BC.r, AF.r1); }
-void CPU::INCBC() { BC.r++; }
-void CPU::INCB() { _inc(BC.r1); }
-void CPU::DECB() { _dec(BC.r1); }
-void CPU::LDBn() { BC.r1 = fetch(); }
+void CPU::LDmBCA() { write8(PAIR(B, C), A); }
+
+void CPU::INCBC() {
+    C++;
+    if (!C) { B++; }
+}
+
+void CPU::INCB() { B = _inc(B); }
+void CPU::DECB() { B = _dec(B); }
+void CPU::LDBn() { B = fetch(); }
 
 void CPU::RLCA() {
-    uint8_t carry = (AF.r1 & 0x80) >> 7;
+    uint8_t carry = (A & 0x80) >> 7;
     carry ? setBit(CARRY) : clrBit(CARRY);
-    AF.r1 = (AF.r1 << 1) | carry;
+    A = (A << 1) | carry;
     clrBit(SIGN | HALF | ZERO);
 }
 
@@ -551,89 +559,117 @@ void CPU::LDmnnSP() {
     PC += 2;
 }
 
-void CPU::ADDHLBC() { _add16(BC.r); }
-void CPU::LDAmBC() { AF.r1 = read8(BC.r); }
-void CPU::DECBC() { BC.r--; }
-void CPU::INCC() { _inc(BC.r2); }
-void CPU::DECC() { _dec(BC.r2); }
-void CPU::LDCn() { BC.r2 = fetch(); }
+void CPU::ADDHLBC() { _add16(PAIR(B, C)); }
+void CPU::LDAmBC() { A = read8(PAIR(B, C)); }
+
+void CPU::DECBC() {
+    if (!C) { B--; }
+    C--;
+}
+
+void CPU::INCC() { C = _inc(C); }
+void CPU::DECC() { C = _dec(C); }
+void CPU::LDCn() { C = fetch(); }
 
 void CPU::RRCA() {
-    uint8_t carry = (AF.r1 & 0x01) << 7;
+    uint8_t carry = (A & 0x01) << 7;
     carry ? setBit(CARRY) : clrBit(CARRY);
-    AF.r1 = (AF.r1 >> 1) | carry;
+    A = (A >> 1) | carry;
     clrBit(SIGN | HALF | ZERO);
 }
 
 void CPU::STOP() { stop = 1; }
 
 void CPU::LDDEnn() {
-    DE.r = read16(PC);
+    uint16_t de = read16(PC);
     PC += 2;
+    D = (de & 0xFF00) >> 8;
+    E = de & 0x00FF;
 }
 
-void CPU::LDmDEA() { write8(DE.r, AF.r1); }
-void CPU::INCDE() { DE.r++; }
-void CPU::INCD() { _inc(DE.r1); }
-void CPU::DECD() { _dec(DE.r1); }
-void CPU::LDDn() { DE.r1 = fetch(); }
+void CPU::LDmDEA() { write8(PAIR(D, E), A); }
+
+void CPU::INCDE() {
+    E++;
+    if (!E) { D++; }
+}
+
+void CPU::INCD() { D = _inc(D); }
+void CPU::DECD() { D = _dec(D); }
+void CPU::LDDn() { D = fetch(); }
 
 void CPU::RLA() {
-    uint8_t carry = (AF.r2 & CARRY) ? 1 : 0;
-    AF.r1 & 0x80 ? setBit(CARRY) : clrBit(CARRY);
-    AF.r1 = (AF.r1 << 1) | carry;
+    uint8_t carry = (F & CARRY) ? 1 : 0;
+    A & 0x80 ? setBit(CARRY) : clrBit(CARRY);
+    A = (A << 1) | carry;
     clrBit(SIGN | HALF | ZERO);
 }
 
 void CPU::JRn() { PC += (int8_t) fetch(); }
-void CPU::ADDHLDE() { _add16(DE.r); }
-void CPU::LDAmDE() { AF.r1 = read8(DE.r); }
-void CPU::DECDE() { DE.r--; }
-void CPU::INCE() { _inc(DE.r2); }
-void CPU::DECE() { _dec(DE.r2); }
-void CPU::LDEn() { DE.r2 = fetch(); }
+void CPU::ADDHLDE() { _add16(PAIR(D, E)); }
+void CPU::LDAmDE() { A = read8(PAIR(D, E)); }
+
+void CPU::DECDE() {
+    if (!E) { D--; }
+    E--;
+}
+
+void CPU::INCE() { E = _inc(E); }
+void CPU::DECE() { E = _dec(E); }
+void CPU::LDEn() { E = fetch(); }
 
 void CPU::RRA() {
-    uint8_t carry = (AF.r2 & CARRY) ? 0x80 : 0x00;
-    (AF.r1 & 0x01) ? setBit(CARRY) : clrBit(CARRY);
-    AF.r1 = (AF.r1 >> 1) | carry;
+    uint8_t carry = (F & CARRY) ? 0x80 : 0x00;
+    A & 0x01 ? setBit(CARRY) : clrBit(CARRY);
+    A = (A >> 1) | carry;
     clrBit(HALF | SIGN | ZERO);
 }
 
 void CPU::JRnzn() {
     int8_t offset = (int8_t) fetch();
-    if (!(AF.r2 & ZERO)) {
+    if (!(F & ZERO)) {
         PC += offset;
         cycles += 4;
     }
 }
 
 void CPU::LDHLnn() {
-    HL.r = read16(PC);
+    uint16_t hl = read16(PC);
     PC += 2;
+    H = (hl & 0xFF00) >> 8;
+    L = hl & 0x00FF;
 }
 
-void CPU::LDmHLpA() { write8(HL.r++, AF.r1); }
-void CPU::INCHL() { HL.r++; }
-void CPU::INCH() { _inc(HL.r1); }
-void CPU::DECH() { _dec(HL.r1); }
-void CPU::LDHn() { HL.r1 = fetch(); }
+void CPU::LDmHLpA() {
+    write8(PAIR(H, L), A);
+    L++;
+    if (!L) { H++; }
+}
+
+void CPU::INCHL() {
+    L++;
+    if (!L) { H++; }
+}
+
+void CPU::INCH() { H = _inc(H); }
+void CPU::DECH() { H = _dec(H); }
+void CPU::LDHn() { H = fetch(); }
 
 void CPU::DAA() {
-    int32_t a = AF.r1;
+    int32_t a = A;
 
-    if (!(AF.r2 & SIGN)) {
-        if ((AF.r2 & HALF) || (a & 0x0F) > 9) {
+    if (!(F & SIGN)) {
+        if ((F & HALF) || (a & 0x0F) > 9) {
             a += 0x06;
         }
-        if ((AF.r2 & CARRY) || a > 0x9F) {
+        if ((F & CARRY) || a > 0x9F) {
             a += 0x60;
         }
     } else {
-        if (AF.r2 & HALF) {
+        if (F & HALF) {
             a = (a - 6) & 0xFF;
         }
-        if (AF.r2 & CARRY) {
+        if (F & CARRY) {
             a -= 0x60;
         }
     }
@@ -643,32 +679,42 @@ void CPU::DAA() {
     a &= 0xFF;
     a ? clrBit(ZERO) : setBit(ZERO);
     clrBit(HALF);
-    AF.r1 = (uint8_t) a;
+    A = (uint8_t) a;
 }
 
 void CPU::JRzn() {
     int8_t offset = (int8_t) fetch();
-    if (AF.r2 & ZERO) {
+    if (F & ZERO) {
         PC += offset;
         cycles += 4;
     }
 }
 
-void CPU::ADDHLHL() { _add16(HL.r); }
-void CPU::LDAmHLp() { AF.r1 = read8(HL.r++); }
-void CPU::DECHL() { HL.r--; }
-void CPU::INCL() { _inc(HL.r2); }
-void CPU::DECL() { _dec(HL.r2); }
-void CPU::LDLn() { HL.r2 = fetch(); }
+void CPU::ADDHLHL() { _add16(PAIR(H, L)); }
+
+void CPU::LDAmHLp() {
+    A = read8(PAIR(H, L));
+    L++;
+    if (!L) { H++; }
+}
+
+void CPU::DECHL() {
+    if (!L) { H--; }
+    L--;
+}
+
+void CPU::INCL() { L = _inc(L); }
+void CPU::DECL() { L = _dec(L); }
+void CPU::LDLn() { L = fetch(); }
 
 void CPU::CPL() {
-    AF.r1 = ~AF.r1;
+    A = ~A;
     setBit(SIGN | HALF);
 }
 
 void CPU::JRncn() {
     int8_t offset = (int8_t) fetch();
-    if (!(AF.r2 & CARRY)) {
+    if (!(F & CARRY)) {
         PC += offset;
         cycles += 4;
     }
@@ -679,22 +725,16 @@ void CPU::LDSPnn() {
     PC += 2;
 }
 
-void CPU::LDmHLmA() { write8(HL.r--, AF.r1); }
+void CPU::LDmHLmA() {
+    write8(PAIR(H, L), A);
+    if (!L) { H--; }
+    L--;
+}
+
 void CPU::INCSP() { SP++; }
-
-void CPU::INCmHL() {
-    uint8_t operand = read8(HL.r);
-    _inc(operand);
-    write16(HL.r, operand);
-}
-
-void CPU::DECmHL() {
-    uint8_t operand = read8(HL.r);
-    _dec(operand);
-    write16(HL.r, operand);
-}
-
-void CPU::LDmHLn() { write8(HL.r, fetch()); }
+void CPU::INCmHL() { write8(PAIR(H, L), _inc(read8(PAIR(H, L)))); }
+void CPU::DECmHL() { write8(PAIR(H, L), _dec(read8(PAIR(H, L)))); }
+void CPU::LDmHLn() { write8(PAIR(H, L), fetch()); }
 
 void CPU::SCF() {
     setBit(CARRY);
@@ -703,166 +743,175 @@ void CPU::SCF() {
 
 void CPU::JRcn() {
     int8_t offset = (int8_t) fetch();
-    if (AF.r2 & CARRY) {
+    if (F & CARRY) {
         PC += offset;
         cycles += 4;
     }
 }
 
 void CPU::ADDHLSP() { _add16(SP); }
-void CPU::LDAmHLm() { AF.r1 = read8(HL.r--); }
+void CPU::LDAmHLm() {
+    A = read8(PAIR(H, L));
+    if (!L) { H--; }
+    L--;
+}
+
 void CPU::DECSP() { SP--; }
-void CPU::INCA() { _inc(AF.r1); }
-void CPU::DECA() { _dec(AF.r1); }
-void CPU::LDAn() { AF.r1 = fetch(); }
+void CPU::INCA() { A = _inc(A); }
+void CPU::DECA() { A = _dec(A); }
+void CPU::LDAn() { A = fetch(); }
 
 void CPU::CCF() {
-    (AF.r2 & CARRY) ? clrBit(CARRY) : setBit(CARRY);
+    (F & CARRY) ? clrBit(CARRY) : setBit(CARRY);
     clrBit(SIGN | HALF);
 }
 
-void CPU::LDBB() { BC.r1 = BC.r1; }
-void CPU::LDBC() { BC.r1 = BC.r2; }
-void CPU::LDBD() { BC.r1 = DE.r1; }
-void CPU::LDBE() { BC.r1 = DE.r2; }
-void CPU::LDBH() { BC.r1 = HL.r1; }
-void CPU::LDBL() { BC.r1 = HL.r2; }
-void CPU::LDBmHL() { BC.r1 = read8(HL.r); }
-void CPU::LDBA() { BC.r1 = AF.r1; }
-void CPU::LDCB() { BC.r2 = BC.r1; }
-void CPU::LDCC() { BC.r2 = BC.r2; }
-void CPU::LDCD() { BC.r2 = DE.r1; }
-void CPU::LDCE() { BC.r2 = DE.r2; }
-void CPU::LDCH() { BC.r2 = HL.r1; }
-void CPU::LDCL() { BC.r2 = HL.r2; }
-void CPU::LDCmHL() { BC.r2 = read8(HL.r); }
-void CPU::LDCA() { BC.r2 = AF.r1; }
-void CPU::LDDB() { DE.r1 = BC.r1; }
-void CPU::LDDC() { DE.r1 = BC.r2; }
-void CPU::LDDD() { DE.r1 = DE.r1; }
-void CPU::LDDE() { DE.r1 = DE.r2; }
-void CPU::LDDH() { DE.r1 = HL.r1; }
-void CPU::LDDL() { DE.r1 = HL.r2; }
-void CPU::LDDmHL() { DE.r1 = read8(HL.r); }
-void CPU::LDDA() { DE.r1 = AF.r1; }
-void CPU::LDEB() { DE.r2 = BC.r1; }
-void CPU::LDEC() { DE.r2 = BC.r2; }
-void CPU::LDED() { DE.r2 = DE.r1; }
-void CPU::LDEE() { DE.r2 = DE.r2; }
-void CPU::LDEH() { DE.r2 = HL.r1; }
-void CPU::LDEL() { DE.r2 = HL.r2; }
-void CPU::LDEmHL() { DE.r2 = read8(HL.r); }
-void CPU::LDEA() { DE.r2 = AF.r1; }
-void CPU::LDHB() { HL.r1 = BC.r1; }
-void CPU::LDHC() { HL.r1 = BC.r2; }
-void CPU::LDHD() { HL.r1 = DE.r1; }
-void CPU::LDHE() { HL.r1 = DE.r2; }
-void CPU::LDHH() { HL.r1 = HL.r1; }
-void CPU::LDHL() { HL.r1 = HL.r2; }
-void CPU::LDHmHL() { HL.r1 = read8(HL.r); }
-void CPU::LDHA() { HL.r1 = AF.r1; }
-void CPU::LDLB() { HL.r2 = BC.r1; }
-void CPU::LDLC() { HL.r2 = BC.r2; }
-void CPU::LDLD() { HL.r2 = DE.r1; }
-void CPU::LDLE() { HL.r2 = DE.r2; }
-void CPU::LDLH() { HL.r2 = HL.r1; }
-void CPU::LDLL() { HL.r2 = HL.r2; }
-void CPU::LDLmHL() { HL.r2 = read8(HL.r); }
-void CPU::LDLA() { HL.r2 = AF.r1; }
-void CPU::LDmHLB() { write8(HL.r, BC.r1); }
-void CPU::LDmHLC() { write8(HL.r, BC.r2); }
-void CPU::LDmHLD() { write8(HL.r, DE.r1); }
-void CPU::LDmHLE() { write8(HL.r, DE.r2); }
-void CPU::LDmHLH() { write8(HL.r, HL.r1); }
-void CPU::LDmHLL() { write8(HL.r, HL.r2); }
+void CPU::LDBB() { }
+void CPU::LDBC() { B = C; }
+void CPU::LDBD() { B = D; }
+void CPU::LDBE() { B = E; }
+void CPU::LDBH() { B = H; }
+void CPU::LDBL() { B = L; }
+void CPU::LDBmHL() { B = read8(PAIR(H, L)); }
+void CPU::LDBA() { B = A; }
+void CPU::LDCB() { C = B; }
+void CPU::LDCC() { }
+void CPU::LDCD() { C = D; }
+void CPU::LDCE() { C = E; }
+void CPU::LDCH() { C = H; }
+void CPU::LDCL() { C = L; }
+void CPU::LDCmHL() { C = read8(PAIR(H, L)); }
+void CPU::LDCA() { C = A; }
+void CPU::LDDB() { D = B; }
+void CPU::LDDC() { D = C; }
+void CPU::LDDD() { }
+void CPU::LDDE() { D = E; }
+void CPU::LDDH() { D = H; }
+void CPU::LDDL() { D = L; }
+void CPU::LDDmHL() { D = read8(PAIR(H, L)); }
+void CPU::LDDA() { D = A; }
+void CPU::LDEB() { E = B; }
+void CPU::LDEC() { E = C; }
+void CPU::LDED() { E = D; }
+void CPU::LDEE() { }
+void CPU::LDEH() { E = H; }
+void CPU::LDEL() { E = L; }
+void CPU::LDEmHL() { E = read8(PAIR(H, L)); }
+void CPU::LDEA() { E = A; }
+void CPU::LDHB() { H = B; }
+void CPU::LDHC() { H = C; }
+void CPU::LDHD() { H = D; }
+void CPU::LDHE() { H = E; }
+void CPU::LDHH() { }
+void CPU::LDHL() { H = L; }
+void CPU::LDHmHL() { H = read8(PAIR(H, L)); }
+void CPU::LDHA() { H = A; }
+void CPU::LDLB() { L = B; }
+void CPU::LDLC() { L = C; }
+void CPU::LDLD() { L = D; }
+void CPU::LDLE() { L = E; }
+void CPU::LDLH() { L = H; }
+void CPU::LDLL() { }
+void CPU::LDLmHL() { L = read8(PAIR(H, L)); }
+void CPU::LDLA() { L = A; }
+void CPU::LDmHLB() { write8(PAIR(H, L), B); }
+void CPU::LDmHLC() { write8(PAIR(H, L), C); }
+void CPU::LDmHLD() { write8(PAIR(H, L), D); }
+void CPU::LDmHLE() { write8(PAIR(H, L), E); }
+void CPU::LDmHLH() { write8(PAIR(H, L), H); }
+void CPU::LDmHLL() { write8(PAIR(H, L), L); }
 void CPU::HALT() { halt = 1; }
-void CPU::LDmHLA() { write8(HL.r, AF.r1); }
-void CPU::LDAB() { AF.r1 = BC.r1; }
-void CPU::LDAC() { AF.r1 = BC.r2; }
-void CPU::LDAD() { AF.r1 = DE.r1; }
-void CPU::LDAE() { AF.r1 = DE.r2; }
-void CPU::LDAH() { AF.r1 = HL.r1; }
-void CPU::LDAL() { AF.r1 = HL.r2; }
-void CPU::LDAmHL() { AF.r1 = read8(HL.r); }
-void CPU::LDAA() { AF.r1 = AF.r1; }
-void CPU::ADDAB() { _add8(BC.r1); }
-void CPU::ADDAC() { _add8(BC.r2); }
-void CPU::ADDAD() { _add8(DE.r1); }
-void CPU::ADDAE() { _add8(DE.r2); }
-void CPU::ADDAH() { _add8(HL.r1); }
-void CPU::ADDAL() { _add8(HL.r2); }
-void CPU::ADDAmHL() { _add8(read8(HL.r)); }
-void CPU::ADDAA() { _add8(AF.r1); }
-void CPU::ADCAB() { _adc(BC.r1); }
-void CPU::ADCAC() { _adc(BC.r2); }
-void CPU::ADCAD() { _adc(DE.r1); }
-void CPU::ADCAE() { _adc(DE.r2); }
-void CPU::ADCAH() { _adc(HL.r1); }
-void CPU::ADCAL() { _adc(HL.r2); }
-void CPU::ADCAmHL() { _adc(read8(HL.r)); }
-void CPU::ADCAA() { _adc(AF.r1); }
-void CPU::SUBB() { _sub(BC.r1); }
-void CPU::SUBC() { _sub(BC.r2); }
-void CPU::SUBD() { _sub(DE.r1); }
-void CPU::SUBE() { _sub(DE.r2); }
-void CPU::SUBH() { _sub(HL.r1); }
-void CPU::SUBL() { _sub(HL.r2); }
-void CPU::SUBmHL() { _sub(read8(HL.r)); }
-void CPU::SUBA() { _sub(AF.r1); }
-void CPU::SBCAB() { _sbc(BC.r1); }
-void CPU::SBCAC() { _sbc(BC.r2); }
-void CPU::SBCAD() { _sbc(DE.r1); }
-void CPU::SBCAE() { _sbc(DE.r2); }
-void CPU::SBCAH() { _sbc(HL.r1); }
-void CPU::SBCAL() { _sbc(HL.r2); }
-void CPU::SBCAmHL() { _sbc(read8(HL.r)); }
-void CPU::SBCAA() { _sbc(AF.r1); }
-void CPU::ANDB() { _and(BC.r1); }
-void CPU::ANDC() { _and(BC.r2); }
-void CPU::ANDD() { _and(DE.r1); }
-void CPU::ANDE() { _and(DE.r2); }
-void CPU::ANDH() { _and(HL.r1); }
-void CPU::ANDL() { _and(HL.r2); }
-void CPU::ANDmHL() { _and(read8(HL.r)); }
-void CPU::ANDA() { _and(AF.r1); }
-void CPU::XORB() { _xor(BC.r1); }
-void CPU::XORC() { _xor(BC.r2); }
-void CPU::XORD() { _xor(DE.r1); }
-void CPU::XORE() { _xor(DE.r2); }
-void CPU::XORH() { _xor(HL.r1); }
-void CPU::XORL() { _xor(HL.r2); }
-void CPU::XORmHL() { _xor(read8(HL.r)); }
-void CPU::XORA() { _xor(AF.r1); }
-void CPU::ORB() { _or(BC.r1); }
-void CPU::ORC() { _or(BC.r2); }
-void CPU::ORD() { _or(DE.r1); }
-void CPU::ORE() { _or(DE.r2); }
-void CPU::ORH() { _or(HL.r1); }
-void CPU::ORL() { _or(HL.r2); }
-void CPU::ORmHL() { _or(read8(HL.r)); }
-void CPU::ORA() { _or(AF.r1); }
-void CPU::CPB() { _cp(BC.r1); }
-void CPU::CPC() { _cp(BC.r2); }
-void CPU::CPD() { _cp(DE.r1); }
-void CPU::CPE() { _cp(DE.r2); }
-void CPU::CPH() { _cp(HL.r1); }
-void CPU::CP_L() { _cp(HL.r2); }
-void CPU::CPmHL() { _cp(read8(HL.r)); }
-void CPU::CPA() { _cp(AF.r1); }
+void CPU::LDmHLA() { write8(PAIR(H, L), A); }
+void CPU::LDAB() { A = B; }
+void CPU::LDAC() { A = C; }
+void CPU::LDAD() { A = D; }
+void CPU::LDAE() { A = E; }
+void CPU::LDAH() { A = H; }
+void CPU::LDAL() { A = L; }
+void CPU::LDAmHL() { A = read8(PAIR(H, L)); }
+void CPU::LDAA() { }
+void CPU::ADDAB() { _add8(B); }
+void CPU::ADDAC() { _add8(C); }
+void CPU::ADDAD() { _add8(D); }
+void CPU::ADDAE() { _add8(E); }
+void CPU::ADDAH() { _add8(H); }
+void CPU::ADDAL() { _add8(L); }
+void CPU::ADDAmHL() { _add8(read8(PAIR(H, L))); }
+void CPU::ADDAA() { _add8(A); }
+void CPU::ADCAB() { _adc(B); }
+void CPU::ADCAC() { _adc(C); }
+void CPU::ADCAD() { _adc(D); }
+void CPU::ADCAE() { _adc(E); }
+void CPU::ADCAH() { _adc(H); }
+void CPU::ADCAL() { _adc(L); }
+void CPU::ADCAmHL() { _adc(read8(PAIR(H, L))); }
+void CPU::ADCAA() { _adc(A); }
+void CPU::SUBB() { _sub(B); }
+void CPU::SUBC() { _sub(C); }
+void CPU::SUBD() { _sub(D); }
+void CPU::SUBE() { _sub(E); }
+void CPU::SUBH() { _sub(H); }
+void CPU::SUBL() { _sub(L); }
+void CPU::SUBmHL() { _sub(read8(PAIR(H, L))); }
+void CPU::SUBA() { _sub(A); }
+void CPU::SBCAB() { _sbc(B); }
+void CPU::SBCAC() { _sbc(C); }
+void CPU::SBCAD() { _sbc(D); }
+void CPU::SBCAE() { _sbc(E); }
+void CPU::SBCAH() { _sbc(H); }
+void CPU::SBCAL() { _sbc(L); }
+void CPU::SBCAmHL() { _sbc(read8(PAIR(H, L))); }
+void CPU::SBCAA() { _sbc(A); }
+void CPU::ANDB() { _and(B); }
+void CPU::ANDC() { _and(C); }
+void CPU::ANDD() { _and(D); }
+void CPU::ANDE() { _and(E); }
+void CPU::ANDH() { _and(H); }
+void CPU::ANDL() { _and(L); }
+void CPU::ANDmHL() { _and(read8(PAIR(H, L))); }
+void CPU::ANDA() { _and(A); }
+void CPU::XORB() { _xor(B); }
+void CPU::XORC() { _xor(C); }
+void CPU::XORD() { _xor(D); }
+void CPU::XORE() { _xor(E); }
+void CPU::XORH() { _xor(H); }
+void CPU::XORL() { _xor(L); }
+void CPU::XORmHL() { _xor(read8(PAIR(H, L))); }
+void CPU::XORA() { _xor(A); }
+void CPU::ORB() { _or(B); }
+void CPU::ORC() { _or(C); }
+void CPU::ORD() { _or(D); }
+void CPU::ORE() { _or(E); }
+void CPU::ORH() { _or(H); }
+void CPU::ORL() { _or(L); }
+void CPU::ORmHL() { _or(read8(PAIR(H, L))); }
+void CPU::ORA() { _or(A); }
+void CPU::CPB() { _cp(B); }
+void CPU::CPC() { _cp(C); }
+void CPU::CPD() { _cp(D); }
+void CPU::CPE() { _cp(E); }
+void CPU::CPH() { _cp(H); }
+void CPU::CP_L() { _cp(L); }
+void CPU::CPmHL() { _cp(read8(PAIR(H, L))); }
+void CPU::CPA() { _cp(A); }
 
 void CPU::RETnz() {
-    if (!(AF.r2 & ZERO)) {
+    if (!(F & ZERO)) {
         PC = pop16();
         cycles += 12;
     }
 }
 
-void CPU::POPBC() { BC.r = pop16(); }
+void CPU::POPBC() {
+    uint16_t bc = pop16();
+    B = (bc & 0xFF00) >> 8;
+    C = bc & 0x00FF;
+}
 
 void CPU::JPnznn() {
     uint16_t operand = read16(PC);
     PC += 2;
-    if (!(AF.r2 & ZERO)) {
+    if (!(F & ZERO)) {
         PC = operand;
         cycles += 4;
     }
@@ -873,14 +922,14 @@ void CPU::JPnn() { PC = read16(PC); }
 void CPU::CALLnznn() {
     uint16_t operand = read16(PC);
     PC += 2;
-    if (!(AF.r2 & ZERO)) {
+    if (!(F & ZERO)) {
         push16(PC);
         PC = operand;
         cycles += 12;
     }
 }
 
-void CPU::PUSHBC() { push16(BC.r); }
+void CPU::PUSHBC() { push16(PAIR(B, C)); }
 void CPU::ADDAn() { _add8(fetch()); }
 
 void CPU::RST00H() {
@@ -889,7 +938,7 @@ void CPU::RST00H() {
 }
 
 void CPU::RETz() {
-    if (AF.r2 & ZERO) {
+    if (F & ZERO) {
         PC = pop16();
         cycles += 12;
     }
@@ -900,7 +949,7 @@ void CPU::RET() { PC = pop16(); }
 void CPU::JPznn() {
     uint16_t operand = read16(PC);
     PC += 2;
-    if (AF.r2 & ZERO) {
+    if (F & ZERO) {
         PC = operand;
         cycles += 4;
     }
@@ -915,7 +964,7 @@ void CPU::CBn() {
 void CPU::CALLznn() {
     uint16_t operand = read16(PC);
     PC += 2;
-    if (AF.r2 & ZERO) {
+    if (F & ZERO) {
         push16(PC);
         PC = operand;
         cycles += 12;
@@ -937,18 +986,22 @@ void CPU::RST08H() {
 }
 
 void CPU::RETnc() {
-    if (!(AF.r2 & CARRY)) {
+    if (!(F & CARRY)) {
         PC = pop16();
         cycles += 12;
     }
 }
 
-void CPU::POPDE() { DE.r = pop16(); }
+void CPU::POPDE() {
+    uint16_t de = pop16();
+    D = (de & 0xFF00) >> 8;
+    E = de & 0x00FF;
+}
 
 void CPU::JPncnn() {
     uint16_t operand = read16(PC);
     PC += 2;
-    if (!(AF.r2 & CARRY)) {
+    if (!(F & CARRY)) {
         PC = operand;
         cycles += 4;
     }
@@ -957,14 +1010,14 @@ void CPU::JPncnn() {
 void CPU::CALLncnn() {
     uint16_t operand = read16(PC);
     PC += 2;
-    if (!(AF.r2 & CARRY)) {
+    if (!(F & CARRY)) {
         push16(PC);
         PC = operand;
         cycles += 12;
     }
 }
 
-void CPU::PUSHDE() { push16(DE.r); }
+void CPU::PUSHDE() { push16(PAIR(D, E)); }
 void CPU::SUBAn() { _sub(fetch()); }
 
 void CPU::RST10H() {
@@ -973,21 +1026,21 @@ void CPU::RST10H() {
 }
 
 void CPU::RETc() {
-    if (AF.r2 & CARRY) {
+    if (F & CARRY) {
         PC = pop16();
         cycles += 12;
     }
 }
 
 void CPU::RETI() {
-    PC = pop16();
     intMaster = true;
+    PC = pop16();
 }
 
 void CPU::JPcnn() {
     uint16_t operand = read16(PC);
     PC += 2;
-    if (AF.r2 & CARRY) {
+    if (F & CARRY) {
         PC = operand;
         cycles += 4;
     }
@@ -996,7 +1049,7 @@ void CPU::JPcnn() {
 void CPU::CALLcnn() {
     uint16_t operand = read16(PC);
     PC += 2;
-    if (AF.r2 & CARRY) {
+    if (F & CARRY) {
         push16(PC);
         PC = operand;
         cycles += 12;
@@ -1010,10 +1063,16 @@ void CPU::RST18H() {
     PC = 0x0018;
 }
 
-void CPU::LDHmnA() { write8(0xFF00 + fetch(), AF.r1); }
-void CPU::POPHL() { HL.r = pop16(); }
-void CPU::LDmCA() { write8(0xFF00 + BC.r2, AF.r1); }
-void CPU::PUSHHL() { push16(HL.r); }
+void CPU::LDHmnA() { write8(0xFF00 + fetch(), A); }
+
+void CPU::POPHL() {
+    uint16_t hl = pop16();
+    H = (hl & 0xFF00) >> 8;
+    L = hl & 0x00FF;
+}
+
+void CPU::LDmCA() { write8(0xFF00 + C, A); }
+void CPU::PUSHHL() { push16(PAIR(H, L)); }
 void CPU::ANDn() { _and(fetch()); }
 
 void CPU::RST20H() {
@@ -1032,12 +1091,12 @@ void CPU::ADDSPn() {
     SP = (uint16_t) sum;
 }
 
-void CPU::JPHL() { PC = HL.r; }
+void CPU::JPHL() { PC = PAIR(H, L); }
 
 void CPU::LDmnnA() {
     uint16_t operand = read16(PC);
     PC += 2;
-    write8(operand, AF.r1);
+    write8(operand, A);
 }
 
 void CPU::XORn() { _xor(fetch()); }
@@ -1047,17 +1106,17 @@ void CPU::RST28H() {
     PC = 0x0028;
 }
 
-void CPU::LDHAmn() { AF.r1 = read8(0xFF00 + fetch()); }
+void CPU::LDHAmn() { A = read8(0xFF00 + fetch()); }
 
 void CPU::POPAF() {
     uint16_t af = pop16();
-    AF.r1 = (af & 0xFF00) >> 8;
-    AF.r2 = af & 0x00F0; // lower nibble of F cannot be modified
+    A = (af & 0xFF00) >> 8;
+    F = af & 0x00F0; // lower nibble of F cannot be modified
 }
 
-void CPU::LDAmC() { AF.r1 = read8(0xFF00 + BC.r2); }
+void CPU::LDAmC() { A = read8(0xFF00 + C); }
 void CPU::DI() { intMaster = false; }
-void CPU::PUSHAF() { push16(AF.r); }
+void CPU::PUSHAF() { push16(PAIR(A, F)); }
 void CPU::ORn() { _or(fetch()); }
 
 void CPU::RST30H() {
@@ -1074,15 +1133,16 @@ void CPU::LDHLSPn() {
     (((SP ^ operand ^ (sum & 0xFFFF)) & 0x0100) == 0x0100) ? setBit(CARRY)
         : clrBit(CARRY);
     clrBit(SIGN | ZERO);
-    HL.r = sum & 0xFFFF;
+    H = (sum & 0xFF00) >> 8;
+    L = sum & 0x00FF;
 }
 
-void CPU::LDSPHL() { SP = HL.r; }
+void CPU::LDSPHL() { SP = PAIR(H, L); }
 
 void CPU::LDAmnn() {
     uint16_t operand = read16(PC);
     PC += 2;
-    AF.r1 = read8(operand);
+    A = read8(operand);
 }
 
 void CPU::EI() { intMaster = true; }
@@ -1093,404 +1153,260 @@ void CPU::RST38H() {
     PC = 0x0038;
 }
 
-void CPU::RLCB() { _rlc(BC.r1); }
-void CPU::RLCC() { _rlc(BC.r2); }
-void CPU::RLCD() { _rlc(DE.r1); }
-void CPU::RLCE() { _rlc(DE.r2); }
-void CPU::RLCH() { _rlc(HL.r1); }
-void CPU::RLCL() { _rlc(HL.r2); }
-
-void CPU::RLCmHL() {
-    uint8_t operand = read8(HL.r);
-    _rlc(operand);
-    write8(HL.r, operand);
-}
-
-void CPU::RLC_A() { _rlc(AF.r1); }
-void CPU::RRCB() { _rrc(BC.r1); }
-void CPU::RRCC() { _rrc(BC.r2); }
-void CPU::RRCD() { _rrc(DE.r1); }
-void CPU::RRCE() { _rrc(DE.r2); }
-void CPU::RRCH() { _rrc(HL.r1); }
-void CPU::RRCL() { _rrc(HL.r2); }
-
-void CPU::RRCmHL() {
-    uint8_t operand = read8(HL.r);
-    _rrc(operand);
-    write8(HL.r, operand);
-}
-
-void CPU::RRC_A() { _rrc(AF.r1); }
-void CPU::RLB() { _rl(BC.r1); }
-void CPU::RLC() { _rl(BC.r2); }
-void CPU::RLD() { _rl(DE.r1); }
-void CPU::RLE() { _rl(DE.r2); }
-void CPU::RLH() { _rl(HL.r1); }
-void CPU::RLL() { _rl(HL.r2); }
-
-void CPU::RLmHL() {
-    uint8_t operand = read8(HL.r);
-    _rl(operand);
-    write8(HL.r, operand);
-}
-
-void CPU::RL_A() { _rl(AF.r1); }
-void CPU::RRB() { _rr(BC.r1); }
-void CPU::RRC() { _rr(BC.r2); }
-void CPU::RRD() { _rr(DE.r1); }
-void CPU::RRE() { _rr(DE.r2); }
-void CPU::RRH() { _rr(HL.r1); }
-void CPU::RRL() { _rr(HL.r2); }
-
-void CPU::RRmHL() {
-    uint8_t operand = read8(HL.r);
-    _rr(operand);
-    write8(HL.r, operand);
-}
-
-void CPU::RR_A() { _rr(AF.r1); }
-void CPU::SLAB() { _sla(BC.r1); }
-void CPU::SLAC() { _sla(BC.r2); }
-void CPU::SLAD() { _sla(DE.r1); }
-void CPU::SLAE() { _sla(DE.r2); }
-void CPU::SLAH() { _sla(HL.r1); }
-void CPU::SLAL() { _sla(HL.r2); }
-
-void CPU::SLAmHL() {
-    uint8_t operand = read8(HL.r);
-    _sla(operand);
-    write8(HL.r, operand);
-}
-
-void CPU::SLAA() { _sla(AF.r1); }
-void CPU::SRAB() { _sra(BC.r1); }
-void CPU::SRAC() { _sra(BC.r2); }
-void CPU::SRAD() { _sra(DE.r1); }
-void CPU::SRAE() { _sra(DE.r2); }
-void CPU::SRAH() { _sra(HL.r1); }
-void CPU::SRAL() { _sra(HL.r2); }
-
-void CPU::SRAmHL() {
-    uint8_t operand = read8(HL.r);
-    _sra(operand);
-    write8(HL.r, operand);
-}
-
-void CPU::SRAA() { _sra(AF.r1); }
-void CPU::SWAPB() { _swap(BC.r1); }
-void CPU::SWAPC() { _swap(BC.r2); }
-void CPU::SWAPD() { _swap(DE.r1); }
-void CPU::SWAPE() { _swap(DE.r2); }
-void CPU::SWAPH() { _swap(HL.r1); }
-void CPU::SWAPL() { _swap(HL.r2); }
-
-void CPU::SWAPmHL() {
-    uint8_t operand = read8(HL.r);
-    _swap(operand);
-    write8(HL.r, operand);
-}
-
-void CPU::SWAPA() { _swap(AF.r1); }
-void CPU::SRLB() { _srl(BC.r1); }
-void CPU::SRLC() { _srl(BC.r2); }
-void CPU::SRLD() { _srl(DE.r1); }
-void CPU::SRLE() { _srl(DE.r2); }
-void CPU::SRLH() { _srl(HL.r1); }
-void CPU::SRLL() { _srl(HL.r2); }
-
-void CPU::SRLmHL() {
-    uint8_t operand = read8(HL.r);
-    _srl(operand);
-    write8(HL.r, operand);
-}
-
-void CPU::SRLA() { _srl(AF.r1); }
-void CPU::BIT0B() { _bit(1, BC.r1); }
-void CPU::BIT0C() { _bit(1, BC.r2); }
-void CPU::BIT0D() { _bit(1, DE.r1); }
-void CPU::BIT0E() { _bit(1, DE.r2); }
-void CPU::BIT0H() { _bit(1, HL.r1); }
-void CPU::BIT0L() { _bit(1, HL.r2); }
-
-void CPU::BIT0mHL() {
-    uint8_t operand = read8(HL.r);
-    _bit(1, operand);
-    write8(HL.r, operand);
-}
-
-void CPU::BIT0A() { _bit(1, AF.r1); }
-void CPU::BIT1B() { _bit(2, BC.r1); }
-void CPU::BIT1C() { _bit(2, BC.r2); }
-void CPU::BIT1D() { _bit(2, DE.r1); }
-void CPU::BIT1E() { _bit(2, DE.r2); }
-void CPU::BIT1H() { _bit(2, HL.r1); }
-void CPU::BIT1L() { _bit(2, HL.r2); }
-
-void CPU::BIT1mHL() {
-    uint8_t operand = read8(HL.r);
-    _bit(2, operand);
-    write8(HL.r, operand);
-}
-
-void CPU::BIT1A() { _bit(2, AF.r1); }
-void CPU::BIT2B() { _bit(4, BC.r1); }
-void CPU::BIT2C() { _bit(4, BC.r2); }
-void CPU::BIT2D() { _bit(4, DE.r1); }
-void CPU::BIT2E() { _bit(4, DE.r2); }
-void CPU::BIT2H() { _bit(4, HL.r1); }
-void CPU::BIT2L() { _bit(4, HL.r2); }
-
-void CPU::BIT2mHL() {
-    uint8_t operand = read8(HL.r);
-    _bit(4, operand);
-    write8(HL.r, operand);
-}
-
-void CPU::BIT2A() { _bit(4, AF.r1); }
-void CPU::BIT3B() { _bit(8, BC.r1); }
-void CPU::BIT3C() { _bit(8, BC.r2); }
-void CPU::BIT3D() { _bit(8, DE.r1); }
-void CPU::BIT3E() { _bit(8, DE.r2); }
-void CPU::BIT3H() { _bit(8, HL.r1); }
-void CPU::BIT3L() { _bit(8, HL.r2); }
-
-void CPU::BIT3mHL() {
-    uint8_t operand = read8(HL.r);
-    _bit(8, operand);
-    write8(HL.r, operand);
-}
-
-void CPU::BIT3A() { _bit(8, AF.r1); }
-void CPU::BIT4B() { _bit(16, BC.r1); }
-void CPU::BIT4C() { _bit(16, BC.r2); }
-void CPU::BIT4D() { _bit(16, DE.r1); }
-void CPU::BIT4E() { _bit(16, DE.r2); }
-void CPU::BIT4H() { _bit(16, HL.r1); }
-void CPU::BIT4L() { _bit(16, HL.r2); }
-
-void CPU::BIT4mHL() {
-    uint8_t operand = read8(HL.r);
-    _bit(16, operand);
-    write8(HL.r, operand);
-}
-
-void CPU::BIT4A() { _bit(16, AF.r1); }
-void CPU::BIT5B() { _bit(32, BC.r1); }
-void CPU::BIT5C() { _bit(32, BC.r2); }
-void CPU::BIT5D() { _bit(32, DE.r1); }
-void CPU::BIT5E() { _bit(32, DE.r2); }
-void CPU::BIT5H() { _bit(32, HL.r1); }
-void CPU::BIT5L() { _bit(32, HL.r2); }
-
-void CPU::BIT5mHL() {
-    uint8_t operand = read8(HL.r);
-    _bit(32, operand);
-    write8(HL.r, operand);
-}
-
-void CPU::BIT5A() { _bit(32, AF.r1); }
-void CPU::BIT6B() { _bit(64, BC.r1); }
-void CPU::BIT6C() { _bit(64, BC.r2); }
-void CPU::BIT6D() { _bit(64, DE.r1); }
-void CPU::BIT6E() { _bit(64, DE.r2); }
-void CPU::BIT6H() { _bit(64, HL.r1); }
-void CPU::BIT6L() { _bit(64, HL.r2); }
-
-void CPU::BIT6mHL() {
-    uint8_t operand = read8(HL.r);
-    _bit(64, operand);
-    write8(HL.r, operand);
-}
-
-void CPU::BIT6A() { _bit(64, AF.r1); }
-void CPU::BIT7B() { _bit(128, BC.r1); }
-void CPU::BIT7C() { _bit(128, BC.r2); }
-void CPU::BIT7D() { _bit(128, DE.r1); }
-void CPU::BIT7E() { _bit(128, DE.r2); }
-void CPU::BIT7H() { _bit(128, HL.r1); }
-void CPU::BIT7L() { _bit(128, HL.r2); }
-
-void CPU::BIT7mHL() {
-    uint8_t operand = read8(HL.r);
-    _bit(128, operand);
-    write8(HL.r, operand);
-}
-
-void CPU::BIT7A() { _bit(128, AF.r1); }
-void CPU::RES0B() { BC.r1 &= ~0x01; }
-void CPU::RES0C() { BC.r2 &= ~0x01; }
-void CPU::RES0D() { DE.r1 &= ~0x01; }
-void CPU::RES0E() { DE.r2 &= ~0x01; }
-void CPU::RES0H() { HL.r1 &= ~0x01; }
-void CPU::RES0L() { HL.r2 &= ~0x01; }
-void CPU::RES0mHL() { write8(HL.r, read8(HL.r) & ~0x01); }
-void CPU::RES0A() { AF.r1 &= ~0x01; }
-void CPU::RES1B() { BC.r1 &= ~0x02; }
-void CPU::RES1C() { BC.r2 &= ~0x02; }
-void CPU::RES1D() { DE.r1 &= ~0x02; }
-void CPU::RES1E() { DE.r2 &= ~0x02; }
-void CPU::RES1H() { HL.r1 &= ~0x02; }
-void CPU::RES1L() { HL.r2 &= ~0x02; }
-void CPU::RES1mHL() { write8(HL.r, read8(HL.r) & ~0x02); }
-void CPU::RES1A() { AF.r1 &= ~0x02; }
-void CPU::RES2B() { BC.r1 &= ~0x04; }
-void CPU::RES2C() { BC.r2 &= ~0x04; }
-void CPU::RES2D() { DE.r1 &= ~0x04; }
-void CPU::RES2E() { DE.r2 &= ~0x04; }
-void CPU::RES2H() { HL.r1 &= ~0x04; }
-void CPU::RES2L() { HL.r2 &= ~0x04; }
-void CPU::RES2mHL() { write8(HL.r, read8(HL.r) & ~0x04); }
-void CPU::RES2A() { AF.r1 &= ~0x04; }
-void CPU::RES3B() { BC.r1 &= ~0x08; }
-void CPU::RES3C() { BC.r2 &= ~0x08; }
-void CPU::RES3D() { DE.r1 &= ~0x08; }
-void CPU::RES3E() { DE.r2 &= ~0x08; }
-void CPU::RES3H() { HL.r1 &= ~0x08; }
-void CPU::RES3L() { HL.r2 &= ~0x08; }
-void CPU::RES3mHL() { write8(HL.r, read8(HL.r) & ~0x08); }
-void CPU::RES3A() { AF.r1 &= ~0x08; }
-void CPU::RES4B() { BC.r1 &= ~0x10; }
-void CPU::RES4C() { BC.r2 &= ~0x10; }
-void CPU::RES4D() { DE.r1 &= ~0x10; }
-void CPU::RES4E() { DE.r2 &= ~0x10; }
-void CPU::RES4H() { HL.r1 &= ~0x10; }
-void CPU::RES4L() { HL.r2 &= ~0x10; }
-void CPU::RES4mHL() { write8(HL.r, read8(HL.r) & ~0x10); }
-void CPU::RES4A() { AF.r1 &= ~0x10; }
-void CPU::RES5B() { BC.r1 &= ~0x20; }
-void CPU::RES5C() { BC.r2 &= ~0x20; }
-void CPU::RES5D() { DE.r1 &= ~0x20; }
-void CPU::RES5E() { DE.r2 &= ~0x20; }
-void CPU::RES5H() { HL.r1 &= ~0x20; }
-void CPU::RES5L() { HL.r2 &= ~0x20; }
-void CPU::RES5mHL() { write8(HL.r, read8(HL.r) & ~0x20); }
-void CPU::RES5A() { AF.r1 &= ~0x20; }
-void CPU::RES6B() { BC.r1 &= ~0x40; }
-void CPU::RES6C() { BC.r2 &= ~0x40; }
-void CPU::RES6D() { DE.r1 &= ~0x40; }
-void CPU::RES6E() { DE.r2 &= ~0x40; }
-void CPU::RES6H() { HL.r1 &= ~0x40; }
-void CPU::RES6L() { HL.r2 &= ~0x40; }
-void CPU::RES6mHL() { write8(HL.r, read8(HL.r) & ~0x40); }
-void CPU::RES6A() { AF.r1 &= ~0x40; }
-void CPU::RES7B() { BC.r1 &= ~0x80; }
-void CPU::RES7C() { BC.r2 &= ~0x80; }
-void CPU::RES7D() { DE.r1 &= ~0x80; }
-void CPU::RES7E() { DE.r2 &= ~0x80; }
-void CPU::RES7H() { HL.r1 &= ~0x80; }
-void CPU::RES7L() { HL.r2 &= ~0x80; }
-void CPU::RES7mHL() { write8(HL.r, read8(HL.r) & ~0x80); }
-void CPU::RES7A() { AF.r1 &= ~0x80; }
-void CPU::SET0B() { _setBit(1, BC.r1); }
-void CPU::SET0C() { _setBit(1, BC.r2); }
-void CPU::SET0D() { _setBit(1, DE.r1); }
-void CPU::SET0E() { _setBit(1, DE.r2); }
-void CPU::SET0H() { _setBit(1, HL.r1); }
-void CPU::SET0L() { _setBit(1, HL.r2); }
-
-void CPU::SET0mHL() {
-    uint8_t operand = read8(HL.r);
-    _setBit(1, operand);
-    write8(HL.r, operand);
-}
-
-void CPU::SET0A() { _setBit(1, AF.r1); }
-void CPU::SET1B() { _setBit(2, BC.r1); }
-void CPU::SET1C() { _setBit(2, BC.r2); }
-void CPU::SET1D() { _setBit(2, DE.r1); }
-void CPU::SET1E() { exit(1); _setBit(2, DE.r2); }
-void CPU::SET1H() { _setBit(2, HL.r1); }
-void CPU::SET1L() { _setBit(2, HL.r2); }
-
-void CPU::SET1mHL() {
-    uint8_t operand = read8(HL.r);
-    _setBit(2, operand);
-    write8(HL.r, operand);
-}
-
-void CPU::SET1A() { _setBit(2, AF.r1); }
-void CPU::SET2B() { _setBit(4, BC.r1); }
-void CPU::SET2C() { _setBit(4, BC.r2); }
-void CPU::SET2D() { _setBit(4, DE.r1); }
-void CPU::SET2E() { _setBit(4, DE.r2); }
-void CPU::SET2H() { _setBit(4, HL.r1); }
-void CPU::SET2L() { _setBit(4, HL.r2); }
-
-void CPU::SET2mHL() {
-    uint8_t operand = read8(HL.r);
-    _setBit(4, operand);
-    write8(HL.r, operand);
-}
-
-void CPU::SET2A() { _setBit(4, AF.r1); }
-void CPU::SET3B() { _setBit(8, BC.r1); }
-void CPU::SET3C() { _setBit(8, BC.r2); }
-void CPU::SET3D() { _setBit(8, DE.r1); }
-void CPU::SET3E() { _setBit(8, DE.r2); }
-void CPU::SET3H() { _setBit(8, HL.r1); }
-void CPU::SET3L() { _setBit(8, HL.r2); }
-
-void CPU::SET3mHL() {
-    uint8_t operand = read8(HL.r);
-    _setBit(8, operand);
-    write8(HL.r, operand);
-}
-
-void CPU::SET3A() { _setBit(8, AF.r1); }
-void CPU::SET4B() { _setBit(16, BC.r1); }
-void CPU::SET4C() { _setBit(16, BC.r2); }
-void CPU::SET4D() { _setBit(16, DE.r1); }
-void CPU::SET4E() { _setBit(16, DE.r2); }
-void CPU::SET4H() { _setBit(16, HL.r1); }
-void CPU::SET4L() { _setBit(16, HL.r2); }
-
-void CPU::SET4mHL() {
-    uint8_t operand = read8(HL.r);
-    _setBit(16, operand);
-    write8(HL.r, operand);
-}
-
-void CPU::SET4A() { _setBit(16, AF.r1); }
-void CPU::SET5B() { _setBit(32, BC.r1); }
-void CPU::SET5C() { _setBit(32, BC.r2); }
-void CPU::SET5D() { _setBit(32, DE.r1); }
-void CPU::SET5E() { _setBit(32, DE.r2); }
-void CPU::SET5H() { _setBit(32, HL.r1); }
-void CPU::SET5L() { _setBit(32, HL.r2); }
-
-void CPU::SET5mHL() {
-    uint8_t operand = read8(HL.r);
-    _setBit(32, operand);
-    write8(HL.r, operand);
-}
-
-void CPU::SET5A() { _setBit(32, AF.r1); }
-void CPU::SET6B() { _setBit(64, BC.r1); }
-void CPU::SET6C() { _setBit(64, BC.r2); }
-void CPU::SET6D() { _setBit(64, DE.r1); }
-void CPU::SET6E() { _setBit(64, DE.r2); }
-void CPU::SET6H() { _setBit(64, HL.r1); }
-void CPU::SET6L() { _setBit(64, HL.r2); }
-
-void CPU::SET6mHL() {
-    uint8_t operand = read8(HL.r);
-    _setBit(64, operand);
-    write8(HL.r, operand);
-}
-
-void CPU::SET6A() { _setBit(64, AF.r1); }
-void CPU::SET7B() { _setBit(128, BC.r1); }
-void CPU::SET7C() { _setBit(128, BC.r2); }
-void CPU::SET7D() { _setBit(128, DE.r1); }
-void CPU::SET7E() { _setBit(128, DE.r2); }
-void CPU::SET7H() { _setBit(128, HL.r1); }
-void CPU::SET7L() { _setBit(128, HL.r2); }
-
-void CPU::SET7mHL() {
-    uint8_t operand = read8(HL.r);
-    _setBit(128, operand);
-    write8(HL.r, operand);
-}
-
-void CPU::SET7A() { _setBit(128, AF.r1); }
+void CPU::RLCB() { B = _rlc(B); }
+void CPU::RLCC() { C = _rlc(C); }
+void CPU::RLCD() { D = _rlc(D); }
+void CPU::RLCE() { E = _rlc(E); }
+void CPU::RLCH() { H = _rlc(H); }
+void CPU::RLCL() { L = _rlc(L); }
+void CPU::RLCmHL() { write8(PAIR(H, L), _rlc(read8(PAIR(H, L)))); }
+void CPU::RLC_A() { A = _rlc(A); }
+void CPU::RRCB() { B = _rrc(B); }
+void CPU::RRCC() { C = _rrc(C); }
+void CPU::RRCD() { D = _rrc(D); }
+void CPU::RRCE() { E = _rrc(E); }
+void CPU::RRCH() { H = _rrc(H); }
+void CPU::RRCL() { L = _rrc(L); }
+void CPU::RRCmHL() { write8(PAIR(H, L), _rrc(read8(PAIR(H, L)))); }
+void CPU::RRC_A() { A = _rrc(A); }
+void CPU::RLB() { B = _rl(B); }
+void CPU::RLC() { C = _rl(C); }
+void CPU::RLD() { D = _rl(D); }
+void CPU::RLE() { E = _rl(E); }
+void CPU::RLH() { H = _rl(H); }
+void CPU::RLL() { L = _rl(L); }
+void CPU::RLmHL() { write8(PAIR(H, L), _rl(read8(PAIR(H, L)))); }
+void CPU::RL_A() { A = _rl(A); }
+void CPU::RRB() { B = _rr(B); }
+void CPU::RRC() { C = _rr(C); }
+void CPU::RRD() { D = _rr(D); }
+void CPU::RRE() { E = _rr(E); }
+void CPU::RRH() { H = _rr(H); }
+void CPU::RRL() { L = _rr(L); }
+void CPU::RRmHL() { write8(PAIR(H, L), _rr(read8(PAIR(H, L)))); }
+void CPU::RR_A() { A = _rr(A); }
+void CPU::SLAB() { B = _sla(B); }
+void CPU::SLAC() { C = _sla(C); }
+void CPU::SLAD() { D = _sla(D); }
+void CPU::SLAE() { E = _sla(E); }
+void CPU::SLAH() { H = _sla(H); }
+void CPU::SLAL() { L = _sla(L); }
+void CPU::SLAmHL() { write8(PAIR(H, L), _sla(read8(PAIR(H, L)))); }
+void CPU::SLAA() { A = _sla(A); }
+void CPU::SRAB() { B = _sra(B); }
+void CPU::SRAC() { C = _sra(C); }
+void CPU::SRAD() { D = _sra(D); }
+void CPU::SRAE() { E = _sra(E); }
+void CPU::SRAH() { H = _sra(H); }
+void CPU::SRAL() { L = _sra(L); }
+void CPU::SRAmHL() { write8(PAIR(H, L), _sra(read8(PAIR(H, L)))); }
+void CPU::SRAA() { A = _sra(A); }
+void CPU::SWAPB() { B = _swap(B); }
+void CPU::SWAPC() { C = _swap(C); }
+void CPU::SWAPD() { D = _swap(D); }
+void CPU::SWAPE() { E = _swap(E); }
+void CPU::SWAPH() { H = _swap(H); }
+void CPU::SWAPL() { L = _swap(L); }
+void CPU::SWAPmHL() { write8(PAIR(H, L), _swap(read8(PAIR(H, L)))); }
+void CPU::SWAPA() { A = _swap(A); }
+void CPU::SRLB() { B = _srl(B); }
+void CPU::SRLC() { C = _srl(C); }
+void CPU::SRLD() { D = _srl(D); }
+void CPU::SRLE() { E = _srl(E); }
+void CPU::SRLH() { H = _srl(H); }
+void CPU::SRLL() { L = _srl(L); }
+void CPU::SRLmHL() { write8(PAIR(H, L), _srl(read8(PAIR(H, L)))); }
+void CPU::SRLA() { A = _srl(A); }
+void CPU::BIT0B() { _bit(1, B); }
+void CPU::BIT0C() { _bit(1, C); }
+void CPU::BIT0D() { _bit(1, D); }
+void CPU::BIT0E() { _bit(1, E); }
+void CPU::BIT0H() { _bit(1, H); }
+void CPU::BIT0L() { _bit(1, L); }
+void CPU::BIT0mHL() { _bit(1, read8(PAIR(H, L))); }
+void CPU::BIT0A() { _bit(1, A); }
+void CPU::BIT1B() { _bit(2, B); }
+void CPU::BIT1C() { _bit(2, C); }
+void CPU::BIT1D() { _bit(2, D); }
+void CPU::BIT1E() { _bit(2, E); }
+void CPU::BIT1H() { _bit(2, H); }
+void CPU::BIT1L() { _bit(2, L); }
+void CPU::BIT1mHL() { _bit(2, read8(PAIR(H, L))); }
+void CPU::BIT1A() { _bit(2, A); }
+void CPU::BIT2B() { _bit(4, B); }
+void CPU::BIT2C() { _bit(4, C); }
+void CPU::BIT2D() { _bit(4, D); }
+void CPU::BIT2E() { _bit(4, E); }
+void CPU::BIT2H() { _bit(4, H); }
+void CPU::BIT2L() { _bit(4, L); }
+void CPU::BIT2mHL() { _bit(4, read8(PAIR(H, L))); }
+void CPU::BIT2A() { _bit(4, A); }
+void CPU::BIT3B() { _bit(8, B); }
+void CPU::BIT3C() { _bit(8, C); }
+void CPU::BIT3D() { _bit(8, D); }
+void CPU::BIT3E() { _bit(8, E); }
+void CPU::BIT3H() { _bit(8, H); }
+void CPU::BIT3L() { _bit(8, L); }
+void CPU::BIT3mHL() { _bit(8, read8(PAIR(H, L))); }
+void CPU::BIT3A() { _bit(8, A); }
+void CPU::BIT4B() { _bit(16, B); }
+void CPU::BIT4C() { _bit(16, C); }
+void CPU::BIT4D() { _bit(16, D); }
+void CPU::BIT4E() { _bit(16, E); }
+void CPU::BIT4H() { _bit(16, H); }
+void CPU::BIT4L() { _bit(16, L); }
+void CPU::BIT4mHL() { _bit(16, read8(PAIR(H, L))); }
+void CPU::BIT4A() { _bit(16, A); }
+void CPU::BIT5B() { _bit(32, B); }
+void CPU::BIT5C() { _bit(32, C); }
+void CPU::BIT5D() { _bit(32, D); }
+void CPU::BIT5E() { _bit(32, E); }
+void CPU::BIT5H() { _bit(32, H); }
+void CPU::BIT5L() { _bit(32, L); }
+void CPU::BIT5mHL() { _bit(32, read8(PAIR(H, L))); }
+void CPU::BIT5A() { _bit(32, A); }
+void CPU::BIT6B() { _bit(64, B); }
+void CPU::BIT6C() { _bit(64, C); }
+void CPU::BIT6D() { _bit(64, D); }
+void CPU::BIT6E() { _bit(64, E); }
+void CPU::BIT6H() { _bit(64, H); }
+void CPU::BIT6L() { _bit(64, L); }
+void CPU::BIT6mHL() { _bit(64, read8(PAIR(H, L))); }
+void CPU::BIT6A() { _bit(64, A); }
+void CPU::BIT7B() { _bit(128, B); }
+void CPU::BIT7C() { _bit(128, C); }
+void CPU::BIT7D() { _bit(128, D); }
+void CPU::BIT7E() { _bit(128, E); }
+void CPU::BIT7H() { _bit(128, H); }
+void CPU::BIT7L() { _bit(128, L); }
+void CPU::BIT7mHL() { _bit(128, read8(PAIR(H, L))); }
+void CPU::BIT7A() { _bit(128, A); }
+void CPU::RES0B() { B &= ~0x01; }
+void CPU::RES0C() { C &= ~0x01; }
+void CPU::RES0D() { D &= ~0x01; }
+void CPU::RES0E() { E &= ~0x01; }
+void CPU::RES0H() { H &= ~0x01; }
+void CPU::RES0L() { L &= ~0x01; }
+void CPU::RES0mHL() { write8(PAIR(H, L), read8(PAIR(H, L)) & ~0x01); }
+void CPU::RES0A() { A &= ~0x01; }
+void CPU::RES1B() { B &= ~0x02; }
+void CPU::RES1C() { C &= ~0x02; }
+void CPU::RES1D() { D &= ~0x02; }
+void CPU::RES1E() { E &= ~0x02; }
+void CPU::RES1H() { H &= ~0x02; }
+void CPU::RES1L() { L &= ~0x02; }
+void CPU::RES1mHL() { write8(PAIR(H, L), read8(PAIR(H, L)) & ~0x02); }
+void CPU::RES1A() { A &= ~0x02; }
+void CPU::RES2B() { B &= ~0x04; }
+void CPU::RES2C() { C &= ~0x04; }
+void CPU::RES2D() { D &= ~0x04; }
+void CPU::RES2E() { E &= ~0x04; }
+void CPU::RES2H() { H &= ~0x04; }
+void CPU::RES2L() { L &= ~0x04; }
+void CPU::RES2mHL() { write8(PAIR(H, L), read8(PAIR(H, L)) & ~0x04); }
+void CPU::RES2A() { A &= ~0x04; }
+void CPU::RES3B() { B &= ~0x08; }
+void CPU::RES3C() { C &= ~0x08; }
+void CPU::RES3D() { D &= ~0x08; }
+void CPU::RES3E() { E &= ~0x08; }
+void CPU::RES3H() { H &= ~0x08; }
+void CPU::RES3L() { L &= ~0x08; }
+void CPU::RES3mHL() { write8(PAIR(H, L), read8(PAIR(H, L)) & ~0x08); }
+void CPU::RES3A() { A &= ~0x08; }
+void CPU::RES4B() { B &= ~0x10; }
+void CPU::RES4C() { C &= ~0x10; }
+void CPU::RES4D() { D &= ~0x10; }
+void CPU::RES4E() { E &= ~0x10; }
+void CPU::RES4H() { H &= ~0x10; }
+void CPU::RES4L() { L &= ~0x10; }
+void CPU::RES4mHL() { write8(PAIR(H, L), read8(PAIR(H, L)) & ~0x10); }
+void CPU::RES4A() { A &= ~0x10; }
+void CPU::RES5B() { B &= ~0x20; }
+void CPU::RES5C() { C &= ~0x20; }
+void CPU::RES5D() { D &= ~0x20; }
+void CPU::RES5E() { E &= ~0x20; }
+void CPU::RES5H() { H &= ~0x20; }
+void CPU::RES5L() { L &= ~0x20; }
+void CPU::RES5mHL() { write8(PAIR(H, L), read8(PAIR(H, L)) & ~0x20); }
+void CPU::RES5A() { A &= ~0x20; }
+void CPU::RES6B() { B &= ~0x40; }
+void CPU::RES6C() { C &= ~0x40; }
+void CPU::RES6D() { D &= ~0x40; }
+void CPU::RES6E() { E &= ~0x40; }
+void CPU::RES6H() { H &= ~0x40; }
+void CPU::RES6L() { L &= ~0x40; }
+void CPU::RES6mHL() { write8(PAIR(H, L), read8(PAIR(H, L)) & ~0x40); }
+void CPU::RES6A() { A &= ~0x40; }
+void CPU::RES7B() { B &= ~0x80; }
+void CPU::RES7C() { C &= ~0x80; }
+void CPU::RES7D() { D &= ~0x80; }
+void CPU::RES7E() { E &= ~0x80; }
+void CPU::RES7H() { H &= ~0x80; }
+void CPU::RES7L() { L &= ~0x80; }
+void CPU::RES7mHL() { write8(PAIR(H, L), read8(PAIR(H, L)) & ~0x80); }
+void CPU::RES7A() { A &= ~0x80; }
+void CPU::SET0B() { B = _setBit(1, B); }
+void CPU::SET0C() { C = _setBit(1, C); }
+void CPU::SET0D() { D = _setBit(1, D); }
+void CPU::SET0E() { E = _setBit(1, E); }
+void CPU::SET0H() { H = _setBit(1, H); }
+void CPU::SET0L() { L = _setBit(1, L); }
+void CPU::SET0mHL() { write8(PAIR(H, L), _setBit(1, read8(PAIR(H, L)))); }
+void CPU::SET0A() { A = _setBit(1, A); }
+void CPU::SET1B() { B = _setBit(2, B); }
+void CPU::SET1C() { C = _setBit(2, C); }
+void CPU::SET1D() { D = _setBit(2, D); }
+void CPU::SET1E() { E = _setBit(2, E); }
+void CPU::SET1H() { H = _setBit(2, H); }
+void CPU::SET1L() { L = _setBit(2, L); }
+void CPU::SET1mHL() { write8(PAIR(H, L), _setBit(2, read8(PAIR(H, L)))); }
+void CPU::SET1A() { A = _setBit(2, A); }
+void CPU::SET2B() { B = _setBit(4, B); }
+void CPU::SET2C() { C = _setBit(4, C); }
+void CPU::SET2D() { D = _setBit(4, D); }
+void CPU::SET2E() { E = _setBit(4, E); }
+void CPU::SET2H() { H = _setBit(4, H); }
+void CPU::SET2L() { L = _setBit(4, L); }
+void CPU::SET2mHL() { write8(PAIR(H, L), _setBit(4, read8(PAIR(H, L)))); }
+void CPU::SET2A() { A = _setBit(4, A); }
+void CPU::SET3B() { B = _setBit(8, B); }
+void CPU::SET3C() { C = _setBit(8, C); }
+void CPU::SET3D() { D = _setBit(8, D); }
+void CPU::SET3E() { E = _setBit(8, E); }
+void CPU::SET3H() { H = _setBit(8, H); }
+void CPU::SET3L() { L = _setBit(8, L); }
+void CPU::SET3mHL() { write8(PAIR(H, L), _setBit(8, read8(PAIR(H, L)))); }
+void CPU::SET3A() { A = _setBit(8, A); }
+void CPU::SET4B() { B = _setBit(16, B); }
+void CPU::SET4C() { C = _setBit(16, C); }
+void CPU::SET4D() { D = _setBit(16, D); }
+void CPU::SET4E() { E = _setBit(16, E); }
+void CPU::SET4H() { H = _setBit(16, H); }
+void CPU::SET4L() { L = _setBit(16, L); }
+void CPU::SET4mHL() { write8(PAIR(H, L), _setBit(16, read8(PAIR(H, L)))); }
+void CPU::SET4A() { A = _setBit(16, A); }
+void CPU::SET5B() { B = _setBit(32, B); }
+void CPU::SET5C() { C = _setBit(32, C); }
+void CPU::SET5D() { D = _setBit(32, D); }
+void CPU::SET5E() { E = _setBit(32, E); }
+void CPU::SET5H() { H = _setBit(32, H); }
+void CPU::SET5L() { L = _setBit(32, L); }
+void CPU::SET5mHL() { write8(PAIR(H, L), _setBit(32, read8(PAIR(H, L)))); }
+void CPU::SET5A() { A = _setBit(32, A); }
+void CPU::SET6B() { B = _setBit(64, B); }
+void CPU::SET6C() { C = _setBit(64, C); }
+void CPU::SET6D() { D = _setBit(64, D); }
+void CPU::SET6E() { E = _setBit(64, E); }
+void CPU::SET6H() { H = _setBit(64, H); }
+void CPU::SET6L() { L = _setBit(64, L); }
+void CPU::SET6mHL() { write8(PAIR(H, L), _setBit(64, read8(PAIR(H, L)))); }
+void CPU::SET6A() { A = _setBit(64, A); }
+void CPU::SET7B() { B = _setBit(128, B); }
+void CPU::SET7C() { C = _setBit(128, C); }
+void CPU::SET7D() { D = _setBit(128, D); }
+void CPU::SET7E() { E = _setBit(128, E); }
+void CPU::SET7H() { H = _setBit(128, H); }
+void CPU::SET7L() { L = _setBit(128, L); }
+void CPU::SET7mHL() { write8(PAIR(H, L), _setBit(128, read8(PAIR(H, L)))); }
+void CPU::SET7A() { A = _setBit(128, A); }
 

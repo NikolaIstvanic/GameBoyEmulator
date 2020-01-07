@@ -16,10 +16,10 @@ void GPU::reset() {
     scrollX = 0;
     scrollY = 0;
     clocks = 0;
-    state = HBLANK;
     lcdControl = 0x00;
     lcdStatus = 0x00;
     lyCompare = 0x00;
+    state = HBLANK;
 
     bg[0] = colorPalette[0];
     bg[1] = colorPalette[1];

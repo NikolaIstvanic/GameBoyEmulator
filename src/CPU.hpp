@@ -64,10 +64,8 @@ class CPU {
         uint8_t handleHalt();
         inline void logInfo() const;
         inline uint8_t fetch();
-        inline uint16_t relativeOffset(uint8_t offset) const;
         inline void setBit(uint8_t f);
         inline void clrBit(uint8_t f);
-        inline void setZEROSIGN(uint8_t value);
         void stepInterrupt();
         void vblankISR();
         void lcdcISR();
@@ -90,18 +88,18 @@ class CPU {
         void _xor(uint8_t operand);
         void _or(uint8_t operand);
         void _cp(uint8_t operand);
-        void _inc(uint8_t& operand);
-        void _dec(uint8_t& operand);
-        void _rlc(uint8_t& operand);
-        void _rrc(uint8_t& operand);
-        void _rl(uint8_t& operand);
-        void _rr(uint8_t& operand);
-        void _sla(uint8_t& operand);
-        void _sra(uint8_t& operand);
-        void _swap(uint8_t& operand);
-        void _srl(uint8_t& operand);
+        uint8_t _inc(uint8_t operand);
+        uint8_t _dec(uint8_t operand);
+        uint8_t _rlc(uint8_t operand);
+        uint8_t _rrc(uint8_t operand);
+        uint8_t _rl(uint8_t operand);
+        uint8_t _rr(uint8_t operand);
+        uint8_t _sla(uint8_t operand);
+        uint8_t _sra(uint8_t operand);
+        uint8_t _swap(uint8_t operand);
+        uint8_t _srl(uint8_t operand);
         void _bit(uint8_t mask, uint8_t operand);
-        void _setBit(uint8_t mask, uint8_t& operand) { operand |= mask; }
+        uint8_t _setBit(uint8_t mask, uint8_t operand) { return operand | mask; }
 
         // Instruction set methods (excluding illegal opcodes)
         void NOP(); void LDBCnn(); void LDmBCA(); void INCBC(); void INCB(); void DECB();
@@ -185,21 +183,15 @@ class CPU {
         void SET7B(); void SET7C(); void SET7D(); void SET7E(); void SET7H(); void SET7L(); void SET7mHL(); void SET7A();
 
         GameBoy* gb;
-        uint8_t additional_cycle = 0;
 
-        // TODO; is this endianness ?
-        union Register {
-            struct {
-                uint8_t r2;
-                uint8_t r1;
-            };
-            uint16_t r = 0x0000;
-        };
-
-        Register AF;
-        Register BC;
-        Register DE;
-        Register HL;
+        uint8_t A = 0x00;
+        uint8_t F = 0x00;
+        uint8_t B = 0x00;
+        uint8_t C = 0x00;
+        uint8_t D = 0x00;
+        uint8_t E = 0x00;
+        uint8_t H = 0x00;
+        uint8_t L = 0x00;
 
         // 16-bit stack pointer
         uint16_t SP = 0x00;
