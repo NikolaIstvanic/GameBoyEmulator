@@ -5,24 +5,30 @@ Timer::Timer() { reset(); }
 
 void Timer::reset() {
     this->running = true;
-    this->frequency = 0x00;
-    this->cycles = freqCount[this->frequency];
+    this->timerCount = (uint8_t) freqCount[FREQ4096];
+    this->modulo = 0x00;
+    this->control = 0x00;
+    this->timerValue = 0x00;
+
+    this->divCount = (uint8_t) freqCount[FREQ16384];
 }
 
 void Timer::step(uint32_t cycles) {
-    if (running) {
-        divider += cycles;
-        this->cycles -= cycles;
-        uint8_t value = gb->read8(TIMA) + 1;
-        if (value == 0x00) {
-            gb->cpu.intFlags |= INT_TIMER;
-        }
-        gb->write8(TIMA, value);
+    this->divCount -= cycles;
+    while (this->divCount <= 0) {
+        this->divCount += freqCount[FREQ16384];
     }
-}
 
-void Timer::setFrequency(uint8_t freq) {
-    this->frequency = freq;
-    this->cycles = freqCount[this->frequency];
+    if (this->control & 0x04) {
+        this->timerCount -= cycles;
+        while (this->timerCount <= 0) {
+            this->timerCount += freqCount[this->control & 0x03];
+            this->timerValue++;
+            if (!this->timerValue) {
+                this->timerValue = this->modulo;
+                this->gb->cpu.intFlags |= INT_TIMER;
+            }
+        }
+    }
 }
 

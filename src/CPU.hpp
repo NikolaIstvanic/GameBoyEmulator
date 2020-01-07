@@ -26,7 +26,6 @@ class CPU {
         void connectGameBoy(GameBoy* g) {
             gb = g;
             timer.connectGameBoy(g);
-            div.connectGameBoy(g);
         }
         void reset();
         uint8_t step();
@@ -36,7 +35,6 @@ class CPU {
         uint8_t cycles = 0;
 
         Timer timer;
-        Timer div;
 
         // STATUS REGISTER VALUES
         enum CPUFLAG {

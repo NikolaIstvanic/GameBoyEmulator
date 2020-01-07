@@ -128,6 +128,7 @@ void GPU::updateScreen() {
         struct gpuSprite sprite = ((struct gpuSprite*) (gb->RAM.data() + 0xFE00))[i];
         uint16_t sx = sprite.x - 8;
         uint16_t sy = sprite.y - 16;
+        uint16_t offset = 0;
 
         if (sy <= scanline && (sy + 8) > scanline) {
             std::array<olc::Pixel, 4> p = spritePalette[sprite.palette];
@@ -149,8 +150,9 @@ void GPU::updateScreen() {
                         color = tiles[sprite.tile][tileRow][x];
                     }
                     if (color) {
-                        sprScreen.SetPixel(sx + i, scanline, p[color]);
+                        sprScreen.SetPixel(sx + offset, scanline, p[color]);
                     }
+                    offset++;
                 }
             }
         }

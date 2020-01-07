@@ -34,12 +34,12 @@ class GPU {
         } state;
 
         bool frameDone = false;
-
         uint16_t clocks = 0;
         uint8_t scanline = 0x00;
         uint8_t control = 0x00;
         uint8_t scrollX = 0;
         uint8_t scrollY = 0;
+
         std::array<olc::Pixel, 4> bg;
         std::array<std::array<olc::Pixel, 4>, 2> spritePalette;
         std::array<olc::Pixel, 4> colorPalette;

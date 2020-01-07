@@ -232,8 +232,7 @@ uint8_t CPU::step() {
         return 0x01;
     }
     if (halt) {
-        //return handleHalt();
-        return 0x01;
+        return handleHalt();
     }
     opcode = fetch();
     cycles = this->instruction_rom[opcode].cycles;

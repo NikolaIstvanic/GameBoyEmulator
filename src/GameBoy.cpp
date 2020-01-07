@@ -47,7 +47,7 @@ void GameBoy::reset() {
 void GameBoy::step() {
     uint8_t cycles = cpu.step();
     gpu.step(cycles);
-    //cpu.timer.step(cycles);
+    cpu.timer.step(cycles);
 }
 
 uint8_t GameBoy::read8(uint16_t addr) {
@@ -62,13 +62,13 @@ uint8_t GameBoy::read8(uint16_t addr) {
             return 0xFF;
         }
     } else if (addr == 0xFF04) {
-        return cpu.timer.divider;
+        return cpu.timer.divCount;
     } else if (addr == 0xFF05) {
-        return cpu.timer.timer;
+        return cpu.timer.timerCount;
     } else if (addr == 0xFF06) {
         return cpu.timer.modulo;
     } else if (addr == 0xFF07) {
-        return cpu.timer.frequency;
+        return cpu.timer.control;
     } else if (addr == 0xFF0F) {
         return cpu.intFlags;
     } else if (addr == 0xFF40) {
@@ -94,13 +94,13 @@ void GameBoy::write8(uint16_t addr, uint8_t data) {
     if (0x8000 <= addr && addr <= 0x97FF) {
         updateTile(addr);
     } else if (addr == 0xFF04) {
-        cpu.timer.divider = 0x00;
+        cpu.timer.divCount = 0x00;
     } else if (addr == 0xFF05) {
-
+        cpu.timer.timerCount = data;
     } else if (addr == 0xFF06) {
         cpu.timer.modulo = data;
     } else if (addr == 0xFF07) {
-        cpu.timer.setFrequency(data);
+        cpu.timer.control = data;
     } else if (addr == 0xFF0F) {
         cpu.intFlags = data;
     } else if (addr == 0xFF40) {
