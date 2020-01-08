@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <memory>
 
-#include "Cartridge.hpp"
 #include "olcPixelGameEngine.h"
 
 #define WIDTH 160

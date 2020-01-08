@@ -3,7 +3,6 @@
 #include <cstdint>
 #include <memory>
 
-#include "Cartridge.hpp"
 #include "CPU.hpp"
 #include "GPU.hpp"
 

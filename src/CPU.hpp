@@ -17,6 +17,8 @@
 #define PC_SERIAL 0x0058
 #define PC_HITOLO 0x0060
 
+#define PAIR(_reg1, _reg2) ((uint16_t) ((_reg1) << 8) | (_reg2))
+
 class GameBoy;
 
 class CPU {
@@ -102,59 +104,55 @@ class CPU {
         // Instruction set methods (excluding illegal opcodes)
         void NOP(); void LDBCnn(); void LDmBCA(); void INCBC(); void INCB(); void DECB();
         void LDBn(); void RLCA(); void LDmnnSP(); void ADDHLBC(); void LDAmBC(); void DECBC();
-        void INCC(); void DECC(); void LDCn(); void RRCA();
-        void STOP(); void LDDEnn(); void LDmDEA(); void INCDE(); void INCD(); void DECD();
-        void LDDn(); void RLA(); void JRn(); void ADDHLDE(); void LDAmDE(); void DECDE();
-        void INCE(); void DECE(); void LDEn(); void RRA();
-        void JRnzn(); void LDHLnn(); void LDmHLpA(); void INCHL(); void INCH(); void DECH();
-        void LDHn(); void DAA(); void JRzn(); void ADDHLHL(); void LDAmHLp(); void DECHL();
-        void INCL(); void DECL(); void LDLn(); void CPL();
+        void INCC(); void DECC(); void LDCn(); void RRCA(); void STOP(); void LDDEnn();
+        void LDmDEA(); void INCDE(); void INCD(); void DECD(); void LDDn(); void RLA();
+        void JRn(); void ADDHLDE(); void LDAmDE(); void DECDE(); void INCE(); void DECE();
+        void LDEn(); void RRA(); void JRnzn(); void LDHLnn(); void LDmHLpA(); void INCHL();
+        void INCH(); void DECH(); void LDHn(); void DAA(); void JRzn(); void ADDHLHL();
+        void LDAmHLp(); void DECHL(); void INCL(); void DECL(); void LDLn(); void CPL();
         void JRncn(); void LDSPnn(); void LDmHLmA(); void INCSP(); void INCmHL(); void DECmHL();
         void LDmHLn(); void SCF(); void JRcn(); void ADDHLSP(); void LDAmHLm(); void DECSP();
-        void INCA(); void DECA(); void LDAn(); void CCF();
-        void LDBB(); void LDBC(); void LDBD(); void LDBE(); void LDBH(); void LDBL(); void LDBmHL();
-        void LDBA(); void LDCB(); void LDCC(); void LDCD(); void LDCE(); void LDCH(); void LDCL();
-        void LDCmHL(); void LDCA();
-        void LDDB(); void LDDC(); void LDDD(); void LDDE(); void LDDH(); void LDDL();
-        void LDDmHL(); void LDDA(); void LDEB(); void LDEC(); void LDED(); void LDEE();
-        void LDEH(); void LDEL(); void LDEmHL(); void LDEA();
-        void LDHB(); void LDHC(); void LDHD(); void LDHE(); void LDHH(); void LDHL();
-        void LDHmHL(); void LDHA(); void LDLB(); void LDLC(); void LDLD(); void LDLE();
-        void LDLH(); void LDLL(); void LDLmHL(); void LDLA();
-        void LDmHLB(); void LDmHLC(); void LDmHLD(); void LDmHLE(); void LDmHLH(); void LDmHLL();
-        void HALT(); void LDmHLA(); void LDAB(); void LDAC(); void LDAD(); void LDAE();
-        void LDAH(); void LDAL(); void LDAmHL(); void LDAA();
-        void ADDAB(); void ADDAC(); void ADDAD(); void ADDAE(); void ADDAH(); void ADDAL();
-        void ADDAmHL(); void ADDAA(); void ADCAB(); void ADCAC(); void ADCAD();
-        void ADCAE(); void ADCAH(); void ADCAL(); void ADCAmHL(); void ADCAA();
-        void SUBB(); void SUBC(); void SUBD(); void SUBE(); void SUBH(); void SUBL(); void SUBmHL();
+        void INCA(); void DECA(); void LDAn(); void CCF(); void LDBB(); void LDBC(); void LDBD();
+        void LDBE(); void LDBH(); void LDBL(); void LDBmHL(); void LDBA(); void LDCB();
+        void LDCC(); void LDCD(); void LDCE(); void LDCH(); void LDCL(); void LDCmHL();
+        void LDCA(); void LDDB(); void LDDC(); void LDDD(); void LDDE(); void LDDH();
+        void LDDL(); void LDDmHL(); void LDDA(); void LDEB(); void LDEC(); void LDED();
+        void LDEE(); void LDEH(); void LDEL(); void LDEmHL(); void LDEA(); void LDHB();
+        void LDHC(); void LDHD(); void LDHE(); void LDHH(); void LDHL(); void LDHmHL();
+        void LDHA(); void LDLB(); void LDLC(); void LDLD(); void LDLE(); void LDLH();
+        void LDLL(); void LDLmHL(); void LDLA(); void LDmHLB(); void LDmHLC(); void LDmHLD();
+        void LDmHLE(); void LDmHLH(); void LDmHLL(); void HALT(); void LDmHLA(); void LDAB();
+        void LDAC(); void LDAD(); void LDAE(); void LDAH(); void LDAL(); void LDAmHL();
+        void LDAA(); void ADDAB(); void ADDAC(); void ADDAD(); void ADDAE(); void ADDAH();
+        void ADDAL(); void ADDAmHL(); void ADDAA(); void ADCAB(); void ADCAC(); void ADCAD();
+        void ADCAE(); void ADCAH(); void ADCAL(); void ADCAmHL(); void ADCAA(); void SUBB();
+        void SUBC(); void SUBD(); void SUBE(); void SUBH(); void SUBL(); void SUBmHL();
         void SUBA(); void SBCAB(); void SBCAC(); void SBCAD(); void SBCAE(); void SBCAH();
-        void SBCAL(); void SBCAmHL(); void SBCAA();
-        void ANDB(); void ANDC(); void ANDD(); void ANDE(); void ANDH(); void ANDL(); void ANDmHL();
-        void ANDA(); void XORB(); void XORC(); void XORD(); void XORE(); void XORH(); void XORL();
-        void XORmHL(); void XORA();
-        void ORB(); void ORC(); void ORD(); void ORE(); void ORH(); void ORL(); void ORmHL();
-        void ORA(); void CPB(); void CPC(); void CPD(); void CPE(); void CPH(); void CP_L();
-        void CPmHL(); void CPA(); 
-        void RETnz(); void POPBC(); void JPnznn(); void JPnn(); void CALLnznn(); void PUSHBC(); void ADDAn();
-        void RST00H(); void RETz(); void RET(); void JPznn(); void CBn(); void CALLznn(); void CALLnn();
-        void ADCAn(); void RST08H();
-        void RETnc(); void POPDE(); void JPncnn(); void PANIC(); void CALLncnn(); void PUSHDE(); void SUBAn();
-        void RST10H(); void RETc(); void RETI(); void JPcnn(); void CALLcnn(); void SBCAn(); void RST18H();
-        void LDHmnA(); void POPHL(); void LDmCA(); void PUSHHL(); void ANDn(); void RST20H(); void ADDSPn();
-        void JPHL(); void LDmnnA(); void XORn(); void RST28H();
-        void LDHAmn(); void POPAF(); void LDAmC(); void DI(); void PUSHAF(); void ORn(); void RST30H();
-        void LDHLSPn(); void LDSPHL(); void LDAmnn(); void EI(); void CPn(); void RST38H();
+        void SBCAL(); void SBCAmHL(); void SBCAA(); void ANDB(); void ANDC(); void ANDD();
+        void ANDE(); void ANDH(); void ANDL(); void ANDmHL(); void ANDA(); void XORB();
+        void XORC(); void XORD(); void XORE(); void XORH(); void XORL(); void XORmHL();
+        void XORA(); void ORB(); void ORC(); void ORD(); void ORE(); void ORH(); void ORL();
+        void ORmHL(); void ORA(); void CPB(); void CPC(); void CPD(); void CPE(); void CPH();
+        void CP_L(); void CPmHL(); void CPA();  void RETnz(); void POPBC(); void JPnznn();
+        void JPnn(); void CALLnznn(); void PUSHBC(); void ADDAn(); void RST00H(); void RETz();
+        void RET(); void JPznn(); void CBn(); void CALLznn(); void CALLnn(); void ADCAn();
+        void RST08H(); void RETnc(); void POPDE(); void JPncnn(); void PANIC(); void CALLncnn();
+        void PUSHDE(); void SUBAn(); void RST10H(); void RETc(); void RETI(); void JPcnn();
+        void CALLcnn(); void SBCAn(); void RST18H(); void LDHmnA(); void POPHL(); void LDmCA();
+        void PUSHHL(); void ANDn(); void RST20H(); void ADDSPn(); void JPHL(); void LDmnnA();
+        void XORn(); void RST28H(); void LDHAmn(); void POPAF(); void LDAmC(); void DI();
+        void PUSHAF(); void ORn(); void RST30H(); void LDHLSPn(); void LDSPHL(); void LDAmnn();
+        void EI(); void CPn(); void RST38H();
 
 		void RLCB(); void RLCC(); void RLCD(); void RLCE(); void RLCH(); void RLCL(); void RLCmHL();
 		void RLC_A(); void RRCB(); void RRCC();  void RRCD(); void RRCE(); void RRCH(); void RRCL();
-		void RRCmHL(); void RRC_A(); void RLB(); void RLC(); void RLD(); void RLE(); void RLH(); void RLL();
-        void RLmHL(); void RL_A(); void RRB(); void RRC(); void RRD(); void RRE(); void RRH(); void RRL();
-        void RRmHL(); void RR_A(); void SLAB(); void SLAC(); void SLAD(); void SLAE(); void SLAH();
-        void SLAL(); void SLAmHL(); void SLAA(); void SRAB(); void SRAC(); void SRAD(); void SRAE();
-        void SRAH(); void SRAL(); void SRAmHL(); void SRAA(); void SWAPB(); void SWAPC(); void SWAPD();
-        void SWAPE(); void SWAPH(); void SWAPL(); void SWAPmHL(); void SWAPA(); void SRLB(); void SRLC();
-        void SRLD(); void SRLE(); void SRLH(); void SRLL(); void SRLmHL(); void SRLA();
+		void RRCmHL(); void RRC_A(); void RLB(); void RLC(); void RLD(); void RLE(); void RLH();
+        void RLL(); void RLmHL(); void RL_A(); void RRB(); void RRC(); void RRD(); void RRE();
+        void RRH(); void RRL(); void RRmHL(); void RR_A(); void SLAB(); void SLAC(); void SLAD();
+        void SLAE(); void SLAH(); void SLAL(); void SLAmHL(); void SLAA(); void SRAB(); void SRAC();
+        void SRAD(); void SRAE(); void SRAH(); void SRAL(); void SRAmHL(); void SRAA(); void SWAPB();
+        void SWAPC(); void SWAPD(); void SWAPE(); void SWAPH(); void SWAPL(); void SWAPmHL(); void SWAPA();
+        void SRLB(); void SRLC(); void SRLD(); void SRLE(); void SRLH(); void SRLL(); void SRLmHL(); void SRLA();
         void BIT0B(); void BIT0C(); void BIT0D(); void BIT0E(); void BIT0H(); void BIT0L(); void BIT0mHL(); void BIT0A();
         void BIT1B(); void BIT1C(); void BIT1D(); void BIT1E(); void BIT1H(); void BIT1L(); void BIT1mHL(); void BIT1A();
         void BIT2B(); void BIT2C(); void BIT2D(); void BIT2E(); void BIT2H(); void BIT2L(); void BIT2mHL(); void BIT2A();
