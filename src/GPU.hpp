@@ -6,62 +6,58 @@
 
 #include "olcPixelGameEngine.h"
 
-#define WIDTH 160
+#define WIDTH  160
 #define HEIGHT 144
-
-#define SPRENABLE 0x02
-#define TILEMAP 0x08
 
 class GameBoy;
 
 class GPU {
-    public:
-        GPU();
-        ~GPU() = default;
-        void reset();
-        void connectGameBoy(GameBoy* g) { gb = g; }
-        olc::Sprite& getScreen();
-        void step(uint8_t cpuCycles);
-        void updateTile(uint16_t addr, uint8_t data);
-        void updateScreen();
+public:
+    GPU();
+    ~GPU();
 
-        enum {
-            HBLANK,
-            VBLANK,
-            OAM,
-            VRAM
-        } state;
+    void reset();
+    void connectGameBoy(GameBoy* gb);
+    olc::Sprite& getScreen();
+    void step(uint8_t cpuCycles);
+    void updateTile(uint16_t addr, uint8_t data);
+    void updateScreen();
 
-        bool frameDone = false;
-        uint16_t clocks = 0;
-        uint8_t scanline = 0x00;
-        uint8_t control = 0x00;
-        uint8_t scrollX = 0;
-        uint8_t scrollY = 0;
+    enum {
+        HBLANK,
+        VBLANK,
+        OAM,
+        VRAM
+    } m_state;
 
-        std::array<olc::Pixel, 4> bg;
-        std::array<std::array<olc::Pixel, 4>, 2> spritePalette;
-        std::array<olc::Pixel, 4> colorPalette;
-        uint8_t tiles[384][8][8];
+    bool m_frameDone = false;
+    uint16_t m_clocks = 0;
+    uint8_t m_scanline = 0x00;
+    uint8_t m_control = 0x00;
+    uint8_t m_scrollX = 0;
+    uint8_t m_scrollY = 0;
 
-        uint8_t lcdControl = 0x00;
-        uint8_t lcdStatus = 0x00;
-        uint8_t lyCompare = 0x00;
+    std::array<olc::Pixel, 4> m_bg;
+    std::array<std::array<olc::Pixel, 4>, 2> m_spritePalette;
+    std::array<olc::Pixel, 4> m_colorPalette;
+    uint8_t m_tiles[384][8][8];
 
-    private:
+    uint8_t m_lcdControl = 0x00;
+    uint8_t m_lcdStatus = 0x00;
+    uint8_t m_lyCompare = 0x00;
 
-        struct gpuSprite {
-            uint8_t y;
-            uint8_t x;
-            uint8_t tile;
-            uint8_t priority : 1;
-            uint8_t vFlip : 1;
-            uint8_t hFlip : 1;
-            uint8_t palette : 1;
-        };
+private:
+    struct gpuSprite {
+        uint8_t y;
+        uint8_t x;
+        uint8_t tile;
+        uint8_t priority : 1;
+        uint8_t vFlip : 1;
+        uint8_t hFlip : 1;
+        uint8_t palette : 1;
+    };
 
-        GameBoy* gb = nullptr;
-
-        olc::Sprite sprScreen = olc::Sprite(WIDTH, HEIGHT);
+    GameBoy* m_gb = nullptr;
+    olc::Sprite m_sprScreen = olc::Sprite(WIDTH, HEIGHT);
 };
 

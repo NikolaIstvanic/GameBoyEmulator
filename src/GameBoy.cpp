@@ -2,15 +2,20 @@
 
 #include "GameBoy.hpp"
 
+#define REG_IF 0xFF0F
+#define REG_IE 0xFFFF
+
 GameBoy::GameBoy() {
-    cpu.connectGameBoy(this);
-    gpu.connectGameBoy(this);
-    std::fill(RAM.begin(), RAM.end(), 0x00);
+    m_cpu.connectGameBoy(this);
+    m_gpu.connectGameBoy(this);
+    std::fill(m_ram.begin(), m_ram.end(), 0x00);
 }
 
+GameBoy::~GameBoy() = default;
+
 void GameBoy::reset() {
-    cpu.reset();
-    gpu.reset();
+    m_cpu.reset();
+    m_gpu.reset();
 
     write8(0xFF07, 0xF8);
     write8(0xFF10, 0x80);
@@ -34,99 +39,102 @@ void GameBoy::reset() {
     write8(0xFF48, 0xFF);
     write8(0xFF49, 0xFF);
 
-    keys.a = 1;
-    keys.b = 1;
-    keys.select = 1;
-    keys.start = 1;
-    keys.right = 1;
-    keys.left = 1;
-    keys.up = 1;
-    keys.down = 1;
+    m_keys.a = 1;
+    m_keys.b = 1;
+    m_keys.select = 1;
+    m_keys.start = 1;
+    m_keys.right = 1;
+    m_keys.left = 1;
+    m_keys.up = 1;
+    m_keys.down = 1;
 }
 
 void GameBoy::step() {
-    uint8_t cycles = cpu.step();
-    gpu.step(cycles);
-    cpu.timer.step(cycles);
+    uint8_t cycles = m_cpu.step();
+    m_gpu.step(cycles);
+    m_cpu.m_timer.step(cycles);
 }
 
 uint8_t GameBoy::read8(uint16_t addr) {
     if (addr == 0xFF00) {
-        if (!(RAM[0xFF00] & 0x20)) {
+        if (!(m_ram[0xFF00] & 0x20)) {
             // Buttons
-            return 0xD0 | ((keys.start << 3) | (keys.select << 2) | (keys.b << 1) | keys.a);
-        } else if (!(RAM[0xFF00] & 0x10)) {
+            return 0xD0 | ((m_keys.start << 3) | (m_keys.select << 2) | (m_keys.b << 1) | m_keys.a);
+        } else if (!(m_ram[0xFF00] & 0x10)) {
             // Directional keys
-            return 0xE0 | ((keys.down << 3) | (keys.up << 2) | (keys.left << 1) | keys.right);
-        } else if (!(RAM[0xFF00] & 0x30)) {
+            return 0xE0 | ((m_keys.down << 3) | (m_keys.up << 2) | (m_keys.left << 1) | m_keys.right);
+        } else if (!(m_ram[0xFF00] & 0x30)) {
             return 0xFF;
         }
     } else if (addr == 0xFF04) {
-        return cpu.timer.divCount;
+        return m_cpu.m_timer.m_divCount;
     } else if (addr == 0xFF05) {
-        return cpu.timer.timerCount;
+        return m_cpu.m_timer.m_timerCount;
     } else if (addr == 0xFF06) {
-        return cpu.timer.modulo;
+        return m_cpu.m_timer.m_modulo;
     } else if (addr == 0xFF07) {
-        return cpu.timer.control;
+        return m_cpu.m_timer.m_control;
     } else if (addr == 0xFF0F) {
-        return cpu.intFlags;
+        return m_cpu.m_intFlags;
     } else if (addr == 0xFF40) {
-        return gpu.lcdControl;
+        return m_gpu.m_lcdControl;
     } else if (addr == 0xFF41) {
-        return gpu.lcdStatus;
+        return m_gpu.m_lcdStatus;
     } else if (addr == 0xFF42) {
-        return gpu.scrollY;
+        return m_gpu.m_scrollY;
     } else if (addr == 0xFF43) {
-        return gpu.scrollX;
+        return m_gpu.m_scrollX;
     } else if (addr == 0xFF44) {
-        return gpu.scanline;
+        return m_gpu.m_scanline;
     } else if (addr == 0xFFFF) {
-        return cpu.intEnable;
+        return m_cpu.m_intEnable;
     }
-    return RAM[addr];
+
+    return m_ram[addr];
 }
 
-uint16_t GameBoy::read16(uint16_t addr) { return (read8(addr + 1) << 8) | read8(addr); }
+uint16_t GameBoy::read16(uint16_t addr) {
+    return (read8(addr + 1) << 8) | read8(addr);
+}
 
 void GameBoy::write8(uint16_t addr, uint8_t data) {
-    RAM[addr] = data;
+    m_ram[addr] = data;
     if (0x8000 <= addr && addr <= 0x97FF) {
         updateTile(addr);
     } else if (addr == 0xFF04) {
-        cpu.timer.divCount = 0x00;
+        m_cpu.m_timer.m_divCount = 0x00;
     } else if (addr == 0xFF05) {
-        cpu.timer.timerCount = data;
+        m_cpu.m_timer.m_timerCount = data;
     } else if (addr == 0xFF06) {
-        cpu.timer.modulo = data;
+        m_cpu.m_timer.m_modulo = data;
     } else if (addr == 0xFF07) {
-        cpu.timer.control = data;
+        m_cpu.m_timer.m_control = data;
     } else if (addr == 0xFF0F) {
-        cpu.intFlags = data;
+        m_cpu.m_intFlags = data;
     } else if (addr == 0xFF40) {
-        gpu.lcdControl = data;
+        m_gpu.m_lcdControl = data;
     } else if (addr == 0xFF42) {
-        gpu.scrollY = data;
+        m_gpu.m_scrollY = data;
     } else if (addr == 0xFF43) {
-        gpu.scrollX = data;
+        m_gpu.m_scrollX = data;
     } else if (addr == 0xFF44) {
-        RAM[addr] = 0x00;
+        m_ram[addr] = 0x00;
     } else if (addr == 0xFF46) {
         DMA(0xFE00, data << 8, 160);
     } else if (addr == 0xFF47) {
         for (int i = 0; i < 4; i++) {
-            gpu.bg[i] = gpu.colorPalette[(data >> (i * 2)) & 0x03];
+            m_gpu.m_bg[i] = m_gpu.m_colorPalette[(data >> (i * 2)) & 0x03];
         }
     } else if (addr == 0xFF48) {
         for (int i = 0; i < 4; i++) {
-            gpu.spritePalette[0][i] = gpu.colorPalette[(data >> (i * 2)) & 0x03];
+            m_gpu.m_spritePalette[0][i] = m_gpu.m_colorPalette[(data >> (i * 2)) & 0x03];
         }
     } else if (addr == 0xFF49) {
         for (int i = 0; i < 4; i++) {
-            gpu.spritePalette[1][i] = gpu.colorPalette[(data >> (i * 2)) & 0x03];
+            m_gpu.m_spritePalette[1][i] = m_gpu.m_colorPalette[(data >> (i * 2)) & 0x03];
         }
     } else if (addr == 0xFFFF) {
-        cpu.intEnable = data;
+        m_cpu.m_intEnable = data;
     }
 }
 
@@ -149,8 +157,8 @@ void GameBoy::updateTile(uint16_t addr) {
 
     for (int i = 0; i < 8; i++) {
         mask = 1 << (7 - i);
-        gpu.tiles[tile][y][i] = ((RAM[0x8000 + addr] & mask) ? 1 : 0)
-            + ((RAM[0x8000 + addr + 1] & mask) ? 2 : 0);
+        m_gpu.m_tiles[tile][y][i] = ((m_ram[0x8000 + addr] & mask) ? 1 : 0)
+            + ((m_ram[0x8000 + addr + 1] & mask) ? 2 : 0);
     }
 }
 
