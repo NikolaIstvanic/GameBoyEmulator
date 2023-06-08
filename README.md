@@ -1,2 +1,2 @@
 # GameBoyEmulator
-GameBoy Emulator Implemented in C++
+GameBoy Emulator implemented in C++
